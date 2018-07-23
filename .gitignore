@@ -1,0 +1,6 @@
+# Directories to ignore
+outputs/
+.idea/
+
+# Files to ignore
+channel.msh

@@ -1,13 +1,12 @@
 # simple set up with two turbines
 from thetis import *
 # from thetis_adjoint import *
-# import pyadjoint
 # from fenics_adjoint.solving import SolveBlock                                       # For extracting adjoint solutions
 import math
 # op2.init(log_level=INFO)
 
 from utils.adaptivity import *
-from utils.interpolation import mixed_pair_interp
+from utils.interpolation import interp
 from utils.options import TurbineOptions
 
 
@@ -77,48 +76,6 @@ def solve_turbine(mesh2d):
     print("Average power = {p:.4e}".format(p=cb.average_power))
 
     return solver_obj.fields.solution_2d
-
-
-def mesh_adapt(solution, op=TurbineOptions()):
-    mesh2d = solution.function_space().mesh()
-
-    op.target_vertices = mesh2d.num_vertices() * op.rescaling
-    uv_2d, elev_2d = solution.split()
-    P1 = FunctionSpace(mesh2d, "CG", 1)
-
-    if op.approach == 'HessianBased'
-        if op.adapt_field != 'f':       # metric for fluid speed
-            spd = Function(P1)
-            spd.interpolate(sqrt(inner(uv_2d, uv_2d)))
-            M = steady_metric(spd, op=op)
-        if op.adapt_field != 's':       # metric for free surface
-            M2 = steady_metric(elev_2d, op=op)
-        if op.adapt_field == 'b':       # intersect metrics for fluid speed and free surface
-            M = metric_intersection(M, M2)
-        elif op.adapt_field == 'f':
-            M = M2
-
-    elif op.approach in ('DWP', 'DWR'):
-        epsilon = Function(P1, name='error_2d')
-
-        # load error indicators
-        with DumbCheckpoint(op.directory() + 'hdf5/ErrorIndicator2d_00000', mode=FILE_READ) as le:
-            le.load(epsilon)
-            le.close()
-        estimate = Function(P1).assign(interp(mesh2d, epsilon))
-        print("#### DEBUG: error estimator norm = %.4e" % norm(estimate))
-
-        # compute metric field
-        M = isotropic_metric(estimate, invert=False, op=op)
-        if op.gradate:
-            bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
-            H0 = Function(P1).interpolate(CellSize(mesh2d))
-            M_ = isotropic_metric(interp(mesh2d, H0), bdy=bdy, op=op)  # Initial boundary metric
-            M = metric_intersection(M, M_, bdy=bdy)
-            M = gradate_metric(M, op=op)
-    mesh2d = AnisotropicAdaptation(mesh2d, M).adapted_mesh
-
-    return mesh2d
 
 
 def get_error_estimators(mesh2d, op=TurbineOptions()):
@@ -191,7 +148,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
     J = cb1.average_power
-    print("Average power = {p:.4e}".format(p=J))
+    print("Average power = {:.4e}".format(J))
 
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
@@ -239,7 +196,41 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         se.close()
     File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
 
-    return q
+    return q, epsilon
+
+
+def mesh_adapt(field_for_adaptation, op=TurbineOptions()):
+    mesh2d = field_for_adaptation.function_space().mesh()
+    op.target_vertices = mesh2d.num_vertices() * op.rescaling
+    P1 = FunctionSpace(mesh2d, "CG", 1)
+
+    if op.approach == 'HessianBased':
+        uv_2d, elev_2d = field_for_adaptation.split()
+        if op.adapt_field != 'f':       # metric for fluid speed
+            spd = Function(P1)
+            spd.interpolate(sqrt(inner(uv_2d, uv_2d)))
+            M = steady_metric(spd, op=op)
+        if op.adapt_field != 's':       # metric for free surface
+            M2 = steady_metric(elev_2d, op=op)
+        if op.adapt_field == 'b':       # intersect metrics for fluid speed and free surface
+            M = metric_intersection(M, M2)
+        elif op.adapt_field == 'f':
+            M = M2
+
+    elif op.approach in ('DWP', 'DWR'):
+        print("#### DEBUG: error estimator norm = %.4e" % norm(field_for_adaptation))
+
+        # compute metric field
+        M = isotropic_metric(field_for_adaptation, invert=False, op=op)
+        if op.gradate:
+            bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
+            H0 = Function(P1).interpolate(CellSize(mesh2d))
+            M_ = isotropic_metric(interp(mesh2d, H0), bdy=bdy, op=op)  # Initial boundary metric
+            M = metric_intersection(M, M_, bdy=bdy)
+            M = gradate_metric(M, op=op)
+    mesh2d = AnisotropicAdaptation(mesh2d, M).adapted_mesh
+
+    return mesh2d
 
 
 if __name__ == "__main__":
@@ -249,7 +240,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
     parser.add_argument("-f", help="Choose field to adapt to from {'s', 'f', 'b'}, denoting speed, free surface and both, resp.")
-    parser.add_argument("-n", help="Number of mesh adaptation steps")
     args = parser.parse_args()
 
     op = TurbineOptions()
@@ -257,19 +247,19 @@ if __name__ == "__main__":
         op.approach = args.a
     if args.f is not None:
         op.adapt_field = args.f
-    n = int(args.n) if args.n is not None else 1
 
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":
         solve_turbine(mesh2d)
     else:
-        for i in range(n):
-            print("\n#### Solving on mesh {i:d}\n".format(i=i))
-            sol = solve_turbine(mesh2d)
-            if i < n-1:
-                mesh2d = mesh_adapt(sol, op=op)
-        sol = mixed_pair_interp(mesh2d, sol)
-        uv, elev = sol.split()
-        uv.rename('uv_2d')
-        elev.rename('elev_2d')
-        File('outputs/final_solution.pvd').write(uv, elev)
+        if op.approach == "HessianBased":
+            q = solve_turbine(mesh2d)
+            mesh2d = mesh_adapt(q, op=op)
+        else:
+            q, epsilon = get_error_estimators(mesh2d, op=op)
+            mesh2d = mesh_adapt(epsilon, op=op)
+        uv_2d, elev_2d = q.split()
+        uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
+        uv_2d.rename('uv_2d')
+        elev_2d.rename('elev_2d')
+        File('outputs/SolutionOnAdaptedMesh.pvd').write(uv_2d, elev_2d)

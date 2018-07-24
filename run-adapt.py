@@ -1,7 +1,7 @@
 # simple set up with two turbines
-from thetis import *
-# from thetis_adjoint import *
-# from fenics_adjoint.solving import SolveBlock                                       # For extracting adjoint solutions
+# from thetis import *
+from thetis_adjoint import *
+from fenics_adjoint.solving import SolveBlock                                       # For extracting adjoint solutions
 import math
 # op2.init(log_level=INFO)
 
@@ -104,7 +104,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     options.timestep = timestep
     options.simulation_export_time = timestep
     options.simulation_end_time = t_end
-    options.output_directory = 'outputs'
+    options.output_directory = 'outputs/'
     options.check_volume_conservation_2d = True
     options.element_family = 'dg-dg'
     options.timestepper_type = 'SteadyState'
@@ -138,12 +138,13 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     # callback that computes average power
     cb1 = turbines.TurbineFunctionalCallback(solver_obj)
-    if op.order_increase:
-        cb2 = callback.InteriorResidualCallback(solver_obj, export_to_hdf5=True)
-    else:
-        cb2 = callback.ExplicitErrorCallback(solver_obj, export_to_hdf5=True)
     solver_obj.add_callback(cb1, 'timestep')
-    solver_obj.add_callback(cb2, 'export')
+    if op.approach == "DWR":
+        if op.order_increase:
+            cb2 = callback.InteriorResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
+        else:
+            cb2 = callback.ExplicitErrorCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
+        solver_obj.add_callback(cb2, 'export')
 
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
@@ -191,9 +192,6 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             lr.close()
     epsilon = normalise_indicator(epsilon, op=op)
     epsilon.rename('error_2d')
-    with DumbCheckpoint(op.directory() + 'hdf5/ErrorIndicator2d_00000', mode=FILE_CREATE) as se:
-        se.store(epsilon)
-        se.close()
     File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
 
     return q, epsilon
@@ -247,6 +245,7 @@ if __name__ == "__main__":
         op.approach = args.a
     if args.f is not None:
         op.adapt_field = args.f
+    op.order_increase = True        # TODO: ExplicitErrorEstimator needs some work
 
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":

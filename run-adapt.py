@@ -141,7 +141,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     solver_obj.add_callback(cb1, 'timestep')
     if op.approach == "DWR":
         if op.order_increase:
-            cb2 = callback.InteriorResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
+            cb2 = callback.CellResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
         else:
             cb2 = callback.ExplicitErrorCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
         solver_obj.add_callback(cb2, 'export')
@@ -175,7 +175,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     if op.approach == "DWP":
         epsilon.interpolate(q, dual)
     else:
-        tag = 'InteriorResidual2d_' if op.order_increase else 'ExplicitError2d_'
+        tag = 'CellResidual2d_' if op.order_increase else 'ExplicitError2d_'
         with DumbCheckpoint(op.directory() + 'hdf5/' + tag + '00000', mode=FILE_READ) as lr:
             if op.order_increase:
                 residual_2d = Function(V)

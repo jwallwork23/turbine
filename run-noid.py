@@ -87,4 +87,4 @@ solver_obj.add_callback(cb, 'timestep')
 solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
 solver_obj.iterate()
 
-print(cb.average_power)
+print("Average power = {p:.4e}".format(p=cb.average_power))

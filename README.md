@@ -3,9 +3,8 @@
 In this code, anisotropic mesh adaptivity is applied to solving the nonlinear shallow water equations in the coastal, 
 estuarine and ocean modelling solver provided by [Thetis][1]. The Thetis project is built upon the [Firedrake][2]
 project, which enables efficient FEM solution in Python by automatic generation of C code. Anisotropic mesh adaptivity
-is achieved using [PRAgMaTIc][3]. My PhD research takes place in the Applied Modelling and Computation Group ([AMCG][4])
-and as part of the Mathematics of Planet Earth Centre for Doctoral Training ([MPE CDT][5]) at Imperial College London,
-sponsored by EPSRC.
+is achieved using [PRAgMaTIc][3]. This is research of the Applied Modelling and Computation Group ([AMCG][4]) at
+Imperial College London.
 
 ### User instructions
 
@@ -25,4 +24,3 @@ For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.
 [2]: http://firedrakeproject.org/ "Firedrake"
 [3]: https://github.com/meshadaptation/pragmatic "PRAgMaTIc"
 [4]: http://www.imperial.ac.uk/earth-science/research/research-groups/amcg/ "AMCG"
-[5]: http://mpecdt.org "MPE CDT"

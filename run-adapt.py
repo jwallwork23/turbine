@@ -1,5 +1,4 @@
 # simple set up with two turbines
-# from thetis import *
 from thetis_adjoint import *
 from fenics_adjoint.solving import SolveBlock                                       # For extracting adjoint solutions
 import math
@@ -8,6 +7,17 @@ import math
 from utils.adaptivity import *
 from utils.interpolation import interp
 from utils.options import TurbineOptions
+
+# global variables defining turbines
+W=200
+L=1e3
+dx1=10
+dx2=2
+D=18.
+xt1=50.
+yt1=W/2
+xt2=400.
+yt2=W/2
 
 
 def solve_turbine(mesh2d):
@@ -56,17 +66,23 @@ def solve_turbine(mesh2d):
         right_tag: {'elev': Constant(0.)}
     }
 
-    # we've meshed the turbines as DxD squares, so we can treat it
-    # as turbine "farm"s with turbine density of 1 turbine per D^2 area
-    turbine_density = Constant(1.0/D**2, domain=mesh2d)
+    # we haven't meshed the turbines with separate ids, so define a farm everywhere
+    # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
+    # and 0 outside
+    P1DG = FunctionSpace(mesh2d, "DG", 0)
+    x, y = SpatialCoordinate(mesh2d)
+    turbine_density = Function(P1DG)    # note pyadjoint can't deal with coordinateless functions
+    turbine_density.interpolate(conditional(
+        Or(
+            And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
+            And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
+        ), 1.0 / D ** 2, 0))
     farm_options = TidalTurbineFarmOptions()
     farm_options.turbine_density = turbine_density
     farm_options.turbine_options.diameter = D
-    farm_options.turbine_options.thrust_coefficient = C_T*correction
-    # assign ID 2,3 with the "farm"
-    options.tidal_turbine_farms[2] = farm_options
-    options.tidal_turbine_farms[3] = farm_options
-
+    farm_options.turbine_options.thrust_coefficient = C_T * correction
+    # turbine drag is applied everywhere (where the turbine density isn't zero)
+    options.tidal_turbine_farms["everywhere"] = farm_options
 
     # callback that computes average power
     cb = turbines.TurbineFunctionalCallback(solver_obj)
@@ -126,16 +142,23 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         right_tag: {'elev': Constant(0.)}
     }
 
-    # we've meshed the turbines as DxD squares, so we can treat it
-    # as turbine "farm"s with turbine density of 1 turbine per D^2 area
-    turbine_density = Constant(1.0/D**2, domain=mesh2d)
+    # we haven't meshed the turbines with separate ids, so define a farm everywhere
+    # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
+    # and 0 outside
+    P1DG = FunctionSpace(mesh2d, "DG", 0)
+    x, y = SpatialCoordinate(mesh2d)
+    turbine_density = Function(P1DG)  # note pyadjoint can't deal with coordinateless functions
+    turbine_density.interpolate(conditional(
+        Or(
+            And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
+            And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
+        ), 1.0 / D ** 2, 0))
     farm_options = TidalTurbineFarmOptions()
     farm_options.turbine_density = turbine_density
     farm_options.turbine_options.diameter = D
-    farm_options.turbine_options.thrust_coefficient = C_T*correction
-    # assign ID 2,3 with the "farm"
-    options.tidal_turbine_farms[2] = farm_options
-    options.tidal_turbine_farms[3] = farm_options
+    farm_options.turbine_options.thrust_coefficient = C_T * correction
+    # turbine drag is applied everywhere (where the turbine density isn't zero)
+    options.tidal_turbine_farms["everywhere"] = farm_options
 
 
     # callback that computes average power
@@ -199,13 +222,13 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     return q, epsilon
 
 
-def mesh_adapt(field_for_adaptation, op=TurbineOptions()):
-    mesh2d = field_for_adaptation.function_space().mesh()
+def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
+    mesh2d = solution.function_space().mesh()
     op.target_vertices = mesh2d.num_vertices() * op.rescaling
     P1 = FunctionSpace(mesh2d, "CG", 1)
 
     if op.approach == 'HessianBased':
-        uv_2d, elev_2d = field_for_adaptation.split()
+        uv_2d, elev_2d = solution.split()
         if op.adapt_field != 'f':       # metric for fluid speed
             spd = Function(P1)
             spd.interpolate(sqrt(inner(uv_2d, uv_2d)))
@@ -218,10 +241,11 @@ def mesh_adapt(field_for_adaptation, op=TurbineOptions()):
             M = M2
 
     elif op.approach in ('DWP', 'DWR'):
-        print("#### DEBUG: error estimator norm = %.4e" % norm(field_for_adaptation))
+        assert(error_indicator is not None)
+        print("#### DEBUG: error estimator norm = %.4e" % norm(error_indicator))
 
         # compute metric field
-        M = isotropic_metric(field_for_adaptation, invert=False, op=op)
+        M = isotropic_metric(error_indicator, invert=False, op=op)
         if op.gradate:
             bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
             H0 = Function(P1).interpolate(CellSize(mesh2d))
@@ -240,6 +264,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
     parser.add_argument("-f", help="Choose field to adapt to from {'s', 'f', 'b'}, denoting speed, free surface and both, resp.")
+    parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     args = parser.parse_args()
 
     op = TurbineOptions()
@@ -247,18 +272,24 @@ if __name__ == "__main__":
         op.approach = args.a
     if args.f is not None:
         op.adapt_field = args.f
+    if args.n is not None:
+        op.num_adapt = int(args.n)
     op.order_increase = True        # TODO: ExplicitErrorEstimator needs some work
 
+    # mesh2d = RectangleMesh(int(L/dx1), int(W/dx1), L, W)
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":
         solve_turbine(mesh2d)
     else:
         if op.approach == "HessianBased":
-            q = solve_turbine(mesh2d)
-            mesh2d = mesh_adapt(q, op=op)
+            for i in range(op.num_adapt):
+                q = solve_turbine(mesh2d)
+                mesh2d = mesh_adapt(q, op=op)
         else:
+            if op.num_adapt != 1:
+                raise NotImplementedError
             q, epsilon = get_error_estimators(mesh2d, op=op)
-            mesh2d = mesh_adapt(epsilon, op=op)
+            mesh2d = mesh_adapt(q, epsilon, op=op)
         uv_2d, elev_2d = q.split()
         uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
         uv_2d.rename('uv_2d')

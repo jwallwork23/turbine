@@ -10,7 +10,7 @@ sponsored by EPSRC.
 ### User instructions
 
 Download the [Firedrake][1] install script, set
-* ``export PETSC_CONFIGURE_OPTIONS=“--download-pragmatic --with-cxx-dialect=C++11"``
+* ``export PETSC_CONFIGURE_OPTIONS="--download-pragmatic --with-cxx-dialect=C++11"``
 
 and install with option parameters ``--install pyadjoint`` and ``--install thetis``.
 

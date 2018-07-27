@@ -1,4 +1,4 @@
-### Anisotropic mesh adaptivity applied to steady state solution of the shallow water equations in the presence of two tidal turbines ###
+### Anisotropic mesh adaptive solution of the shallow water equations in the presence of tidal turbines ###
 
 In this code, anisotropic mesh adaptivity is applied to solving the nonlinear shallow water equations in the coastal, 
 estuarine and ocean modelling solver provided by [Thetis][1]. The Thetis project is built upon the [Firedrake][2]

@@ -75,14 +75,20 @@ Percent complete  : %4.1f%%    Adapt time : %4.2fs Solver time : %4.2fs
               (mn, 100 * t / self.end_time, adaptTimer, solverTime, nEle, av, mM[0], mM[1]))
         return av
 
+    def directory(self):
+        return 'outputs/' + self.approach + '/'
+
 
 class TurbineOptions(AdaptOptions):
     name = 'Parameters for the 2 turbine problem'
     mode = 'Turbine'
 
     # Solver parameters
+    dt = PositiveFloat(20.).tag(config=True)
     target_vertices = PositiveFloat(1000, help="Target number of vertices").tag(config=True)
     adapt_field = Unicode('s', help="Adaptation field of interest, from {'s' (speed), 'f' (free surface), 'b' (both)}.").tag(config=True)
     h_min = PositiveFloat(1e-4, help="Minimum element size").tag(config=True)
     h_max = PositiveFloat(10., help="Maximum element size").tag(config=True)
     rescaling = PositiveFloat(0.85, help="Scaling parameter for target number of vertices.").tag(config=True)
+    viscosity = NonNegativeFloat(0.1).tag(config=True)
+    drag_coefficient = NonNegativeFloat(0.0025).tag(config=True)

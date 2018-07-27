@@ -9,10 +9,7 @@ from utils.interpolation import interp
 from utils.options import TurbineOptions
 
 # global variables defining turbines
-W=200
-L=1e3
-dx1=10
-dx2=2
+W = 200
 D=18.
 xt1=50.
 yt1=W/2
@@ -20,12 +17,11 @@ xt2=400.
 yt2=W/2
 
 
-def solve_turbine(mesh2d):
+def solve_turbine(mesh2d, op=TurbineOptions()):
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
     # 800 timesteps of 20s
     # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
-    timestep = 20
-    t_end = 0.9*timestep
+    t_end = 0.9*op.dt
 
     H = 40  # water depth
 
@@ -42,18 +38,18 @@ def solve_turbine(mesh2d):
     # create solver and set options
     solver_obj = solver2d.FlowSolver2d(mesh2d, Constant(H))
     options = solver_obj.options
-    options.timestep = timestep
-    options.simulation_export_time = timestep
+    options.timestep = op.dt
+    options.simulation_export_time = op.dt
     options.simulation_end_time = t_end
-    options.output_directory = 'outputs'
+    options.output_directory = op.directory()
     options.check_volume_conservation_2d = True
-    options.element_family = 'dg-dg'
+    options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
     options.timestepper_options.solver_parameters['snes_monitor'] = True
     #options.timestepper_options.implicitness_theta = 1.0
-    options.horizontal_viscosity = Constant(0.1)    # TODO: play with this value for smoothness
-    options.quadratic_drag_coefficient = Constant(0.0025)
+    options.horizontal_viscosity = Constant(op.viscosity)
+    options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
 
     # assign boundary conditions
     left_tag = 1
@@ -99,8 +95,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
     # 800 timesteps of 20s
     # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
-    timestep = 20
-    t_end = 0.9*timestep
+    t_end = 0.9*op.dt
 
     H = 40  # water depth
     H_const = Constant(H)
@@ -118,18 +113,18 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # create solver and set options
     solver_obj = solver2d.FlowSolver2d(mesh2d, H_const)
     options = solver_obj.options
-    options.timestep = timestep
-    options.simulation_export_time = timestep
+    options.timestep = op.dt
+    options.simulation_export_time = op.dt
     options.simulation_end_time = t_end
-    options.output_directory = 'outputs/'
+    options.output_directory = op.directory()
     options.check_volume_conservation_2d = True
-    options.element_family = 'dg-dg'
+    options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
     options.timestepper_options.solver_parameters['snes_monitor'] = True
     #options.timestepper_options.implicitness_theta = 1.0
-    options.horizontal_viscosity = Constant(0.1)
-    options.quadratic_drag_coefficient = Constant(0.0025)
+    options.horizontal_viscosity = Constant(op.viscosity)
+    options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
 
     # assign boundary conditions
     left_tag = 1
@@ -274,16 +269,21 @@ if __name__ == "__main__":
         op.adapt_field = args.f
     if args.n is not None:
         op.num_adapt = int(args.n)
-    op.order_increase = True        # TODO: ExplicitErrorEstimator needs some work
+    op.order_increase = True       # TODO: ExplicitErrorEstimator needs some work
+    op.viscosity = 1.              # TODO: Increasing this value will smoothen and possibly help adjoint solver
 
+    # L = 1e3
+    # dx1 = 10
+    # dx2 = 2
     # mesh2d = RectangleMesh(int(L/dx1), int(W/dx1), L, W)
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":
-        solve_turbine(mesh2d)
+        solve_turbine(mesh2d, op=op)
     else:
         if op.approach == "HessianBased":
             for i in range(op.num_adapt):
-                q = solve_turbine(mesh2d)
+                print("Generating solution on mesh {:d}".format(i))
+                q = solve_turbine(mesh2d, op=op)
                 mesh2d = mesh_adapt(q, op=op)
         else:
             if op.num_adapt != 1:
@@ -294,4 +294,4 @@ if __name__ == "__main__":
         uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
         uv_2d.rename('uv_2d')
         elev_2d.rename('elev_2d')
-        File('outputs/SolutionOnAdaptedMesh.pvd').write(uv_2d, elev_2d)
+        File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)

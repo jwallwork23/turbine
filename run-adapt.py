@@ -42,7 +42,7 @@ def solve_turbine(mesh2d):
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
     options.timestepper_options.solver_parameters['snes_monitor'] = True
     #options.timestepper_options.implicitness_theta = 1.0
-    options.horizontal_viscosity = Constant(0.1)
+    options.horizontal_viscosity = Constant(0.1)    # TODO: play with this value for smoothness
     options.quadratic_drag_coefficient = Constant(0.0025)
 
     # assign boundary conditions
@@ -52,7 +52,8 @@ def solve_turbine(mesh2d):
     freeslip_bc = {'un': Constant(0.0)}
     solver_obj.bnd_functions['shallow_water'] = {
         left_tag: {'uv': Constant((3., 0.))},
-        right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+        # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+        right_tag: {'elev': Constant(0.)}
     }
 
     # we've meshed the turbines as DxD squares, so we can treat it
@@ -121,7 +122,8 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     freeslip_bc = {'un': Constant(0.0)}
     solver_obj.bnd_functions['shallow_water'] = {
         left_tag: {'uv': Constant((3., 0.))},
-        right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+        # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+        right_tag: {'elev': Constant(0.)}
     }
 
     # we've meshed the turbines as DxD squares, so we can treat it

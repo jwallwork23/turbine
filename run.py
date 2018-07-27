@@ -1,7 +1,7 @@
 # simple set up with two turbines
 from thetis import *
 import math
-op2.init(log_level=INFO)
+# op2.init(log_level=INFO)
 
 mesh2d = Mesh('channel.msh')
 
@@ -46,7 +46,8 @@ right_tag = 2
 freeslip_bc = {'un': Constant(0.0)}
 solver_obj.bnd_functions['shallow_water'] = {
     left_tag: {'uv': Constant((3., 0.))},
-    right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+    # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+    right_tag: {'elev': Constant(0.)}
 }
 
 # we've meshed the turbines as DxD squares, so we can treat it

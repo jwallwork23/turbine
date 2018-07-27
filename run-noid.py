@@ -1,7 +1,7 @@
 # simple set up with two turbines without using mesh ids
 from thetis import *
 import math
-op2.init(log_level=INFO)
+# op2.init(log_level=INFO)
 
 # the same parameters as in channel.geo for the case with mesh ids:
 W=200
@@ -58,7 +58,8 @@ right_tag = 2
 freeslip_bc = {'un': Constant(0.0)}
 solver_obj.bnd_functions['shallow_water'] = {
     left_tag: {'uv': Constant((3., 0.))},
-    right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+    # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+    right_tag: {'elev': Constant(0.)}
 }
 
 # we haven't meshed the turbines with separate ids, so define a farm everywhere

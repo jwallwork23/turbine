@@ -1,6 +1,8 @@
 # Directories to ignore
 outputs/
+outputs-noid/
 .idea/
+utils/__pycache__/
 
 # Files to ignore
 channel.msh

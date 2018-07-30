@@ -18,6 +18,11 @@ yt2=W/2
 
 
 def solve_turbine(mesh2d, op=TurbineOptions()):
+    """
+    Solve steady state shallow water equations on mesh `mesh2d`, using `AdaptOptions` parameter class `op`.
+
+    :return: approximate solution tuple for steady state shallow water equations.
+    """
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
     # 800 timesteps of 20s
     # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
@@ -47,6 +52,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
     options.timestepper_options.solver_parameters['snes_monitor'] = True
+    print("Using solver parameters {:s}".format(str(options.timestepper_options.solver_parameters)))
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
     options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
@@ -92,6 +98,11 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
 
 
 def get_error_estimators(mesh2d, op=TurbineOptions()):
+    """
+    Generate a posteriori error indicators on mesh `mesh2d` using `AdaptOptions` parameter class `op`.
+
+    :return: approximate solution to steady state shallow water equations, a posteriori error estimate
+    """
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
     # 800 timesteps of 20s
     # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
@@ -122,6 +133,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
     options.timestepper_options.solver_parameters['snes_monitor'] = True
+    print("Using solver parameters {:s}".format(str(options.timestepper_options.solver_parameters)))
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
     options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
@@ -218,6 +230,14 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
 
 def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
+    """
+    Adapt mesh based on an error indicator or field of interest.
+
+    :param solution: approximate solution of prognostic equations.
+    :param error_indicator: optional error indicator upon which to adapt.
+    :param op: `AdaptOptions` parameter class.
+    :return: adapted mesh.
+    """
     mesh2d = solution.function_space().mesh()
     op.target_vertices = mesh2d.num_vertices() * op.rescaling
     P1 = FunctionSpace(mesh2d, "CG", 1)
@@ -248,6 +268,7 @@ def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
             M = metric_intersection(M, M_, bdy=bdy)
             M = gradate_metric(M, op=op)
     mesh2d = AnisotropicAdaptation(mesh2d, M).adapted_mesh
+    print("Number of elements after mesh adaptation: {:d}".format(mesh2d.num_cells()))
 
     return mesh2d
 

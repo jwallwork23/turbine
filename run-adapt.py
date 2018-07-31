@@ -225,6 +225,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     epsilon = normalise_indicator(epsilon, op=op)
     epsilon.rename('error_2d')
     File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
+    tape.clear_tape()
 
     return q, epsilon
 
@@ -307,10 +308,11 @@ if __name__ == "__main__":
                 q = solve_turbine(mesh2d, op=op)
                 mesh2d = mesh_adapt(q, op=op)
         else:
-            if op.num_adapt != 1:
-                raise NotImplementedError
-            q, epsilon = get_error_estimators(mesh2d, op=op)
-            mesh2d = mesh_adapt(q, epsilon, op=op)
+            for i in range(op.num_adapt):
+                print("Generating solution on mesh {:d}".format(i))
+                q, epsilon = get_error_estimators(mesh2d, op=op)
+                with pyadjoint.stop_annotating():
+                    mesh2d = mesh_adapt(q, epsilon, op=op)
         uv_2d, elev_2d = q.split()
         uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
         uv_2d.rename('uv_2d')

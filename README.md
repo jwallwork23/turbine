@@ -18,6 +18,8 @@ Fetch and checkout the remote branches
 * ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
 * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis.
 
+Run ``make`` to create output directories.
+
 For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.
 
 [1]: http://thetisproject.org/index.html "Thetis"

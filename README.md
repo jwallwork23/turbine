@@ -14,9 +14,10 @@ Imperial College London.
     and install with option parameters ``--install pyadjoint`` and ``--install thetis``.
 
 * Fetch and checkout the remote branches
-    * ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``;
     * ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
-    * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis.
+    * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis;
+    * ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``
+    and call ``make`` in ``firedrake/src/firedrake`` to enable pragmatic drivers.
 
 * Apply ``misc/keep_params.patch`` to pyadjoint, for an update to the ``linear-solver`` branch.
 

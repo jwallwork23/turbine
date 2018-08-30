@@ -167,7 +167,6 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # turbine drag is applied everywhere (where the turbine density isn't zero)
     options.tidal_turbine_farms["everywhere"] = farm_options
 
-
     # callback that computes average power
     cb1 = turbines.TurbineFunctionalCallback(solver_obj)
     solver_obj.add_callback(cb1, 'timestep')

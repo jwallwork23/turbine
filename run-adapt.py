@@ -185,7 +185,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
-    solve_blocks = [block for block in tape._blocks if isinstance(block, SolveBlock)]
+    solve_blocks = [block for block in tape._blocks if isinstance(block, SolveBlock) and block.adj_sol is not None]
     N = len(solve_blocks)
     try:
         assert N == 1
@@ -205,7 +205,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     # form error indicator
     if op.approach == "DWP":
-        epsilon.interpolate(q, dual)
+        epsilon.interpolate(inner(q, dual))
     else:
         tag = 'CellResidual2d_' if op.order_increase else 'ExplicitError2d_'
         with DumbCheckpoint(op.directory() + 'hdf5/' + tag + '00000', mode=FILE_READ) as lr:

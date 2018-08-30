@@ -14,7 +14,7 @@ Download the [Firedrake][1] install script, set
 and install with option parameters ``--install pyadjoint`` and ``--install thetis``.
 
 Fetch and checkout the remote branches 
-* ``https://github.com/taupalosaurus/firedrake`` for firedrake;
+* ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``;
 * ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
 * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis.
 

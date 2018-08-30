@@ -1,4 +1,4 @@
-### Anisotropic mesh adaptive solution of the shallow water equations in the presence of tidal turbines ###
+### Shallow water modelling in the presence of tidal turbines using anisotropic mesh adaptivity
 
 In this code, anisotropic mesh adaptivity is applied to solving the nonlinear shallow water equations in the coastal, 
 estuarine and ocean modelling solver provided by [Thetis][1]. The Thetis project is built upon the [Firedrake][2]
@@ -8,19 +8,22 @@ Imperial College London.
 
 ### User instructions
 
-Download the [Firedrake][1] install script, set
-* ``export PETSC_CONFIGURE_OPTIONS="--download-pragmatic --with-cxx-dialect=C++11"``
+* Download the [Firedrake][1] install script, set
+    * ``export PETSC_CONFIGURE_OPTIONS="--download-pragmatic --with-cxx-dialect=C++11"``
 
-and install with option parameters ``--install pyadjoint`` and ``--install thetis``.
+    and install with option parameters ``--install pyadjoint`` and ``--install thetis``.
 
-Fetch and checkout the remote branches 
-* ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``;
-* ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
-* ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis.
+* Fetch and checkout the remote branches
+    * ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``;
+    * ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
+    * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis.
 
-Run ``make`` to create output directories.
+* Apply ``misc/keep_params.patch`` to pyadjoint, for an update to the ``linear-solver`` branch.
 
-For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.
+* Create output directories by running ``make`` where ``turbine`` has been cloned.
+
+
+#### For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.
 
 [1]: http://thetisproject.org/index.html "Thetis"
 [2]: http://firedrakeproject.org/ "Firedrake"

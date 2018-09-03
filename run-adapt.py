@@ -1,6 +1,6 @@
 # simple set up with two turbines
 from thetis_adjoint import *
-from fenics_adjoint.solving import SolveBlock                                       # For extracting adjoint solutions
+from fenics_adjoint.solving import SolveBlock     # For extracting adjoint solutions
 import math
 # op2.init(log_level=INFO)
 
@@ -108,7 +108,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
     t_end = 0.9*op.dt
 
-    H = 40  # water depth
+    H = 40. # water depth
     H_const = Constant(H)
 
     # turbine parameters:
@@ -207,7 +207,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         epsilon.interpolate(inner(q, dual))
     else:
         tag = 'CellResidual2d_' if op.order_increase else 'ExplicitError2d_'
-        with DumbCheckpoint(op.directory() + 'hdf5/' + tag + '00000', mode=FILE_READ) as lr:
+        with DumbCheckpoint(op.directory() + 'hdf5/' + tag + '00001', mode=FILE_READ) as lr:
             if op.order_increase:
                 residual_2d = Function(V)
                 res_u, res_e = residual_2d.split()

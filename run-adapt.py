@@ -1,6 +1,7 @@
 # simple set up with two turbines
 from thetis_adjoint import *
-from fenics_adjoint.solving import SolveBlock     # For extracting adjoint solutions
+from fenics_adjoint.solving import SolveBlock   # For extracting adjoint solutions
+from firedrake import Expression		# Cannot currently annotate Expression objects
 import math
 # op2.init(log_level=INFO)
 
@@ -111,6 +112,10 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     H = 40. # water depth
     H_const = Constant(H)
 
+    # Vector constants are broken in pyadjoint, so use a vector function instead
+    P1 = VectorFunctionSpace(mesh2d, 'CG', 1)
+    inflow = Function(P1).interpolate(Expression([3., 0.]))
+
     # turbine parameters:
     D = 18  # turbine diameter
     C_T = 0.8  # thrust coefficient
@@ -144,7 +149,8 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # noslip currently doesn't work (vector Constants are broken in firedrake_adjoint)
     freeslip_bc = {'un': Constant(0.0)}
     solver_obj.bnd_functions['shallow_water'] = {
-        left_tag: {'uv': Constant((3., 0.))},
+        #left_tag: {'uv': Constant((3., 0.))},
+        left_tag: {'uv': inflow},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)}
     }

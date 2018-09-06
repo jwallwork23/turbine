@@ -286,6 +286,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
     parser.add_argument("-f", help="Choose field to adapt to from {'s', 'f', 'b'}, denoting speed, free surface and both, resp.")
+    parser.add_argument("-g", help="Apply metric gradation")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     args = parser.parse_args()
 
@@ -294,6 +295,8 @@ if __name__ == "__main__":
         op.approach = args.a
     if args.f is not None:
         op.adapt_field = args.f
+    if args.g is not None:
+        op.gradate = bool(args.g)
     if args.n is not None:
         op.num_adapt = int(args.n)
     op.order_increase = True       # TODO: ExplicitErrorEstimator needs some work

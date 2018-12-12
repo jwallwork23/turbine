@@ -1,7 +1,7 @@
 from thetis import *
 
 
-__all__ = ["local_norm", "difference_quotient_estimator"]
+__all__ = ["local_norm"]
 
 
 def local_norm(f, norm_type='L2'):

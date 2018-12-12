@@ -8,12 +8,14 @@ from utils.adaptivity import *
 from utils.interpolation import interp
 from utils.options import TurbineOptions
 
-# global variables defining turbines
-W = 200
-D=18.
-xt1=50.
+# read global variables defining turbines from geo file
+geo = open('channel.geo', 'r')
+W = float(geo.readline().replace(';', '=').split('=')[1])
+D = float(geo.readline().replace(';', '=').split('=')[1])
+xt1 = float(geo.readline().replace(';', '=').split('=')[1])
+xt2 = float(geo.readline().replace(';', '=').split('=')[1])
+geo.close()
 yt1=W/2
-xt2=400.
 yt2=W/2
 
 
@@ -178,6 +180,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     if op.approach == "DWR":
         if op.order_increase:
             cb2 = callback.CellResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
+            #cb3 = callback.EdgeResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
         else:
             cb2 = callback.ExplicitErrorCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
         solver_obj.add_callback(cb2, 'export')
@@ -201,9 +204,10 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     dual = Function(V)
     dual.assign(solve_blocks[0].adj_sol)
     dual_u, dual_e = dual.split()
+    dual_u.rename('adjoint_velocity_2d')
+    dual_e.rename('adjoint_elev_2d')
+    File(op.directory() + "AdjointSolution2d.pvd").write(dual_u, dual_e)
     q = solver_obj.fields.solution_2d
-    higher_order_dual = Function(op.mixed_space(mesh2d, enrich=True))
-    higher_order_dual_u, higher_order_dual_e = higher_order_dual.split()
     P1 = FunctionSpace(mesh2d, "CG", 1)
     epsilon = Function(P1)
 
@@ -218,6 +222,10 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
                 res_u, res_e = residual_2d.split()
                 lr.load(res_u, name="momentum residual")
                 lr.load(res_e, name="continuity residual")
+
+                # TODO: Needs patchwise interpolation for proper implementation
+                higher_order_dual = Function(op.mixed_space(mesh2d, enrich=True))
+                higher_order_dual_u, higher_order_dual_e = higher_order_dual.split()
                 higher_order_dual_u.interpolate(dual_u)
                 higher_order_dual_e.interpolate(dual_e)
                 epsilon.interpolate(inner(res_u, higher_order_dual_u) + res_e * higher_order_dual_e)

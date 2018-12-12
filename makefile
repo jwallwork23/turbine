@@ -1,4 +1,7 @@
-all: outdirs
+all: mesh outdirs
+
+mesh:
+	gmsh -2 channel.geo
 
 outdirs:
 	mkdir outputs

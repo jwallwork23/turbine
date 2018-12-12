@@ -1,7 +1,6 @@
 # simple set up with two turbines
 from thetis_adjoint import *
 from fenics_adjoint.solving import SolveBlock   # For extracting adjoint solutions
-from firedrake import Expression		# Cannot currently annotate Expression objects
 import math
 # op2.init(log_level=INFO)
 
@@ -114,7 +113,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     # Vector constants are broken in pyadjoint, so use a vector function instead
     P1 = VectorFunctionSpace(mesh2d, 'CG', 1)
-    inflow = Function(P1).interpolate(Expression([3., 0.]))
+    inflow = Function(P1).interpolate(as_vector([3., 0.]))
 
     # turbine parameters:
     D = 18  # turbine diameter

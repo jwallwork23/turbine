@@ -15,7 +15,7 @@ Imperial College London.
 
 * Fetch and checkout the remote branches
     * ``https://bitbucket.org/dolfin-adjoint/pyadjoint/branch/linear-solver`` for pyadjoint;
-    * ``https://github.com/thetisproject/thetis/tree/error-estimation`` for thetis;
+    * ``https://github.com/thetisproject/thetis/tree/joe`` for thetis;
     * ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``
     and call ``make`` in ``firedrake/src/firedrake`` to enable pragmatic drivers.
 

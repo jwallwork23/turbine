@@ -25,6 +25,7 @@ def interp(mesh, *fields):
         family = element.family()
         degree = element.degree()
         f_new = Function(FunctionSpace(mesh, element))
+        f_new.rename(f.dat.name)
         notInDomain = []
         if family == 'Lagrange' and degree == 1:
             coords = mesh.coordinates.dat.data      # Vertex/node coords

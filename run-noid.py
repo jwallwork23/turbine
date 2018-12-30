@@ -3,15 +3,17 @@ from thetis import *
 import math
 # op2.init(log_level=INFO)
 
-# the same parameters as in channel.geo for the case with mesh ids:
-W=200
-L=1e3
-dx1=10
-dx2=2
-D=18.
-xt1=50.
+# read global variables defining turbines from geo file
+geo = open('channel.geo', 'r')
+W = float(geo.readline().replace(';', '=').split('=')[1])
+D = float(geo.readline().replace(';', '=').split('=')[1])
+xt1 = float(geo.readline().replace(';', '=').split('=')[1])
+xt2 = float(geo.readline().replace(';', '=').split('=')[1])
+L = float(geo.readline().replace(';', '=').split('=')[1])
+dx1 = float(geo.readline().replace(';', '=').split('=')[1])
+dx2 = float(geo.readline().replace(';', '=').split('=')[1])
+geo.close()
 yt1=W/2
-xt2=400.
 yt2=W/2
 
 #mesh2d = RectangleMesh(int(L/dx1), int(W/dx1), L, W)

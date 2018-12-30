@@ -21,7 +21,7 @@ Imperial College London.
 
 * Apply ``misc/keep_params.patch`` to pyadjoint, for an update to the ``linear-solver`` branch.
 
-* Create output directories by running ``make`` where ``turbine`` has been cloned.
+* Create output directories and mesh by running ``make`` where ``turbine`` has been cloned.
 
 
 #### For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.

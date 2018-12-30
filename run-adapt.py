@@ -309,10 +309,6 @@ if __name__ == "__main__":
     op.order_increase = True       # TODO: ExplicitErrorEstimator needs some work
     op.viscosity = 1.              # TODO: Increasing this value will smoothen and possibly help adjoint solver
 
-    # L = 1e3
-    # dx1 = 10
-    # dx2 = 2
-    # mesh2d = RectangleMesh(int(L/dx1), int(W/dx1), L, W)
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":
         solve_turbine(mesh2d, op=op)
@@ -330,6 +326,4 @@ if __name__ == "__main__":
                     mesh2d = mesh_adapt(q, epsilon, op=op)
         uv_2d, elev_2d = q.split()
         uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
-        uv_2d.rename('uv_2d')
-        elev_2d.rename('elev_2d')
         File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)

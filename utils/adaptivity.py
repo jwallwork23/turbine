@@ -183,7 +183,11 @@ def normalise_indicator(f, op=TurbineOptions()):
         print("WARNING: minimum norm attained")
     elif scale_factor == op.max_norm:
         print("WARNING: maximum norm attained")
-    f.interpolate(Constant(op.target_vertices / scale_factor) * abs(f))
+    # f.interpolate(Constant(op.target_vertices / scale_factor) * abs(f))
+    name = f.dat.name
+    fs = f.function_space()
+    f = project(Constant(op.target_vertices / scale_factor) * abs(f), fs)
+    f.rename(name)
 
     return f
 
@@ -202,11 +206,13 @@ def isotropic_metric(f, bdy=None, invert=True, op=TurbineOptions()):
     h_max2 = pow(op.h_max, 2)
     scalar = len(f.ufl_element().value_shape()) == 0
     mesh = f.function_space().mesh()
-    g = Function(FunctionSpace(mesh, "CG", 1) if scalar else VectorFunctionSpace(mesh, "CG", 1))
+
+    # Project into P1 space (if required)
+    P1 = FunctionSpace(mesh, "CG", 1) if scalar else VectorFunctionSpace(mesh, "CG", 1)
     if (f.ufl_element().family() == 'Lagrange') & (f.ufl_element().degree() == 1):
-        g.assign(f)
+        g = Function(P1).assign(f)
     else:
-        g.interpolate(f)
+        g = project(f, fs)
 
     # Establish metric
     V = TensorFunctionSpace(mesh, "CG", 1)

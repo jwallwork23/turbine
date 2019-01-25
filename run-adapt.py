@@ -177,7 +177,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # callback that computes average power
     cb1 = turbines.TurbineFunctionalCallback(solver_obj)
     solver_obj.add_callback(cb1, 'timestep')
-    if op.approach == "DWR":
+    if op.approach == "DWR":  # TODO: Remove residual callbacks
         if op.order_increase:
             cb2 = callback.CellResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
             #cb3 = callback.EdgeResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
@@ -189,6 +189,8 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     solver_obj.iterate()
     J = cb1.average_power
     print("Average power = {:.4e}".format(J))
+
+    # TODO: Swap to format used in `residuals`. For this steady state problem, we do not need the callbacks and so can just call `cell_residual` and `edge_residual` directly.
 
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
@@ -213,6 +215,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     # form error indicator
     if op.approach == "DWP":
+        # epsilon = project(inner(q, dual), P1)
         epsilon.interpolate(inner(q, dual))
     else:
         tag = 'CellResidual2d_' if op.order_increase else 'ExplicitError2d_'
@@ -225,14 +228,17 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
                 # TODO: Needs patchwise interpolation for proper implementation
                 higher_order_dual = Function(op.mixed_space(mesh2d, enrich=True))
-                higher_order_dual_u, higher_order_dual_e = higher_order_dual.split()
+                # higher_order_dual = project(dual, op.mixed_space(mesh2d, enrich=True))
+                # higher_order_dual_u, higher_order_dual_e = higher_order_dual.split()
                 higher_order_dual_u.interpolate(dual_u)
                 higher_order_dual_e.interpolate(dual_e)
                 epsilon.interpolate(inner(res_u, higher_order_dual_u) + res_e * higher_order_dual_e)
+                # epsilon = project(inner(res_u, higher_order_dual_u) + res_e * higher_order_dual_e, P1)
             else:
                 residual_2d = Function(P1)
                 lr.load(residual_2d, name="explicit error")
                 epsilon.interpolate(residual_2d * local_norm(dual))
+                # epsilon = project(residual_2d * local_norm(dual), P1)
             lr.close()
     epsilon = normalise_indicator(epsilon, op=op)
     epsilon.rename('error_2d')
@@ -258,8 +264,7 @@ def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
     if op.approach == 'HessianBased':
         uv_2d, elev_2d = solution.split()
         if op.adapt_field != 'f':       # metric for fluid speed
-            spd = Function(P1)
-            spd.interpolate(sqrt(inner(uv_2d, uv_2d)))
+            spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
             M = steady_metric(spd, op=op)
         if op.adapt_field != 's':       # metric for free surface
             M2 = steady_metric(elev_2d, op=op)
@@ -276,7 +281,7 @@ def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
         M = isotropic_metric(error_indicator, invert=False, op=op)
         if op.gradate:
             bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
-            H0 = Function(P1).interpolate(CellSize(mesh2d))
+            H0 = project(CellSize(mesh2d), P1)
             M_ = isotropic_metric(interp(mesh2d, H0), bdy=bdy, op=op)  # Initial boundary metric
             M = metric_intersection(M, M_, bdy=bdy)
             M = gradate_metric(M, op=op)

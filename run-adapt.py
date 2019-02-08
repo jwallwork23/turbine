@@ -275,14 +275,14 @@ def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
 
     elif op.approach in ('DWP', 'DWR'):
         assert(error_indicator is not None)
-        print("#### DEBUG: error estimator norm = %.4e" % norm(error_indicator))
+        #print("#### DEBUG: error estimator norm = %.4e" % norm(error_indicator))
 
         # compute metric field
         M = isotropic_metric(error_indicator, invert=False, op=op)
         if op.gradate:
             bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
             H0 = project(CellSize(mesh2d), P1)
-            M_ = isotropic_metric(interp(mesh2d, H0), bdy=bdy, op=op)  # Initial boundary metric
+            M_ = isotropic_metric(H0, bdy=bdy, op=op)  # Initial boundary metric
             M = metric_intersection(M, M_, bdy=bdy)
             M = gradate_metric(M, op=op)
     mesh2d = AnisotropicAdaptation(mesh2d, M).adapted_mesh

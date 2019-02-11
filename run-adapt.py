@@ -218,12 +218,16 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             # TODO: Use z-z_h form
             ts = solver_obj.timestepper
             cell_res = ts.cell_residual(adjoint)
-            h = CellSize(mesh2d)
+            print("Cell residual: {:.4e}".format(norm(cell_res)))
+            edge_res = ts.edge_residual(adjoint)
+            print("Edge residual: {:.4e}".format(norm(edge_res)))
             P0 = FunctionSpace(mesh2d, "DG", 0)
-            I = TestFunction(P0)
             cell_res = Function(P0).assign(cell_res)
-            epsilon.project(assemble(I * h * h * inner(cell_res, cell_res) * dx))
-            # TODO: Edge residuals
+            edge_res = Function(P0).assign(edge_res)
+
+            I = TestFunction(P0)
+            h = CellSize(mesh2d)
+            epsilon.project(assemble(I * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
         File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)

@@ -101,7 +101,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     solver_obj.iterate()
     print("Average power = {p:.4e}".format(p=cb.average_power))
 
-    return solver_obj.fields.solution_2d
+    return solver_obj
 
 
 def get_error_estimators(mesh2d, op=TurbineOptions()):
@@ -141,6 +141,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     options.simulation_end_time = t_end
     options.output_directory = op.directory()
     options.check_volume_conservation_2d = True
+    options.compute_residuals = op.approach == 'DWR'
     options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
@@ -183,78 +184,56 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # callback that computes average power
     cb1 = turbines.TurbineFunctionalCallback(solver_obj)
     solver_obj.add_callback(cb1, 'timestep')
-    if op.approach == "DWR":  # TODO: Remove residual callbacks
-        if op.order_increase:
-            cb2 = callback.CellResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
-            #cb3 = callback.EdgeResidualCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
-        else:
-            cb2 = callback.ExplicitErrorCallback(solver_obj, export_to_hdf5=True, export_to_pvd=True)
-        solver_obj.add_callback(cb2, 'export')
-
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
     J = cb1.average_power
     print("Average power = {:.4e}".format(J))
 
-    # TODO: Swap to format used in `residuals`. For this steady state problem, we do not need the callbacks and so can just call `cell_residual` and `edge_residual` directly.
-
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
-    solve_blocks = [block for block in tape._blocks if isinstance(block, SolveBlock) and block.adj_sol is not None]
-    N = len(solve_blocks)
+    solve_blocks = [block for block in tape._blocks if isinstance(block, SolveBlock)
+                                                    and not isinstance(block, ProjectBlock)
+                                                    and block.adj_sol is not None]
     try:
-        assert N == 1
+        assert len(solve_blocks) == 1
     except:
-        print("#### DEBUG: Number of solves = {:d}".format(N))
+        ValueError("Expected one SolveBlock, but encountered {:d}".format(len(solve_blocks)))
 
-    # create function spaces and get primal and dual solutions
-    V = op.mixed_space(mesh2d)
-    dual = Function(V)
-    dual.assign(solve_blocks[0].adj_sol)
-    dual_u, dual_e = dual.split()
-    dual_u.rename('adjoint_velocity_2d')
-    dual_e.rename('adjoint_elev_2d')
-    File(op.directory() + "AdjointSolution2d.pvd").write(dual_u, dual_e)
-    q = solver_obj.fields.solution_2d
-    P1 = FunctionSpace(mesh2d, "CG", 1)
-    epsilon = Function(P1)
+    with pyadjoint.stop_annotating():
 
-    # form error indicator
-    if op.approach == "DWP":
-        # epsilon = project(inner(q, dual), P1)
-        epsilon.interpolate(inner(q, dual))
-    else:
-        tag = 'CellResidual2d_' if op.order_increase else 'ExplicitError2d_'
-        with DumbCheckpoint(op.directory() + 'hdf5/' + tag + '00001', mode=FILE_READ) as lr:
-            if op.order_increase:
-                residual_2d = Function(V)
-                res_u, res_e = residual_2d.split()
-                lr.load(res_u, name="momentum residual")
-                lr.load(res_e, name="continuity residual")
+        # Create function spaces and get primal and dual solutions
+        V = op.mixed_space(mesh2d)
+        adjoint = Function(V).assign(solve_blocks[0].adj_sol)
+        adj_u, adj_eta = adjoint.split()
+        adj_u.rename('adjoint_velocity_2d')
+        adj_eta.rename('adjoint_elev_2d')
+        File(op.directory() + "AdjointSolution2d.pvd").write(adj_u, adj_eta)
+        P1 = FunctionSpace(mesh2d, "CG", 1)
+        epsilon = Function(P1)
 
-                # TODO: Needs patchwise interpolation for proper implementation
-                higher_order_dual = Function(op.mixed_space(mesh2d, enrich=True))
-                # higher_order_dual = project(dual, op.mixed_space(mesh2d, enrich=True))
-                # higher_order_dual_u, higher_order_dual_e = higher_order_dual.split()
-                higher_order_dual_u.interpolate(dual_u)
-                higher_order_dual_e.interpolate(dual_e)
-                epsilon.interpolate(inner(res_u, higher_order_dual_u) + res_e * higher_order_dual_e)
-                # epsilon = project(inner(res_u, higher_order_dual_u) + res_e * higher_order_dual_e, P1)
-            else:
-                residual_2d = Function(P1)
-                lr.load(residual_2d, name="explicit error")
-                epsilon.interpolate(residual_2d * local_norm(dual))
-                # epsilon = project(residual_2d * local_norm(dual), P1)
-            lr.close()
-    epsilon = normalise_indicator(epsilon, op=op)
-    epsilon.rename('error_2d')
-    File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
-    tape.clear_tape()
+        # Form error indicator
+        if op.approach == "DWP":
+            epsilon.project(inner(solver_obj.fields.solution_2d, adjoint))
+        else:
+            # TODO: Use z-z_h form
+            ts = solver_obj.timestepper
+            cell_res = ts.cell_residual(adjoint)
+            h = CellSize(mesh2d)
+            P0 = FunctionSpace(mesh2d, "DG", 0)
+            I = TestFunction(P0)
+            cell_res = Function(P0).assign(cell_res)
+            epsilon.project(assemble(I * h * h * inner(cell_res, cell_res) * dx))
+            # TODO: Edge residuals
+        #epsilon = normalise_indicator(epsilon, op=op)  FIXME
+        epsilon.rename('error_2d')
+        File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
+        tape.clear_tape()
+        exit(0) # TODO: temp
 
-    return q, epsilon
+    return solver_obj, epsilon
 
 
-def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
+def mesh_adapt(solver_obj, error_indicator=None, op=TurbineOptions()):
     """
     Adapt mesh based on an error indicator or field of interest.
 
@@ -263,12 +242,12 @@ def mesh_adapt(solution, error_indicator=None, op=TurbineOptions()):
     :param op: `AdaptOptions` parameter class.
     :return: adapted mesh.
     """
-    mesh2d = solution.function_space().mesh()
+    mesh2d = solver_obj.mesh2d
     op.target_vertices = mesh2d.num_vertices() * op.rescaling
     P1 = FunctionSpace(mesh2d, "CG", 1)
 
     if op.approach == 'HessianBased':
-        uv_2d, elev_2d = solution.split()
+        uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
         if op.adapt_field != 'f':       # metric for fluid speed
             spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
             M = steady_metric(spd, op=op)
@@ -327,14 +306,14 @@ if __name__ == "__main__":
         if op.approach == "HessianBased":
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
-                q = solve_turbine(mesh2d, op=op)
-                mesh2d = mesh_adapt(q, op=op)
+                solver_obj = solve_turbine(mesh2d, op=op)
+                mesh2d = mesh_adapt(solver_obj, op=op)
         else:
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
-                q, epsilon = get_error_estimators(mesh2d, op=op)
+                solver_obj, epsilon = get_error_estimators(mesh2d, op=op)
                 with pyadjoint.stop_annotating():
-                    mesh2d = mesh_adapt(q, epsilon, op=op)
-        uv_2d, elev_2d = q.split()
+                    mesh2d = mesh_adapt(solver_obj, epsilon, op=op)
+        uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
         uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
         File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)

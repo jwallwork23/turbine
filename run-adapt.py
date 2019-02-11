@@ -224,11 +224,10 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             cell_res = Function(P0).assign(cell_res)
             epsilon.project(assemble(I * h * h * inner(cell_res, cell_res) * dx))
             # TODO: Edge residuals
-        #epsilon = normalise_indicator(epsilon, op=op)  FIXME
+        epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
         File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
         tape.clear_tape()
-        exit(0) # TODO: temp
 
     return solver_obj, epsilon
 

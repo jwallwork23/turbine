@@ -1,12 +1,15 @@
 # simple set up with two turbines
 from thetis_adjoint import *
-from fenics_adjoint.solving import SolveBlock   # For extracting adjoint solutions
+from fenics_adjoint.solving import SolveBlock       # For extracting adjoint solutions
+from fenics_adjoint.projection import ProjectBlock  # Exclude projections from tape reading
+import pyadjoint
 import math
 # op2.init(log_level=INFO)
 
-from utils.adaptivity import *
-from utils.interpolation import interp
+from adapt.adaptivity import *
+from adapt.interpolation import interp
 from utils.options import TurbineOptions
+
 
 # read global variables defining turbines from geo file
 geo = open('channel.geo', 'r')
@@ -21,23 +24,25 @@ yt2=W/2
 
 def solve_turbine(mesh2d, op=TurbineOptions()):
     """
-    Solve steady state shallow water equations on mesh `mesh2d`, using `AdaptOptions` parameter class `op`.
+    Solve steady state shallow water equations on mesh `mesh2d`, using `AdaptOptions` parameter
+    class `op`.
 
     :return: approximate solution tuple for steady state shallow water equations.
     """
-    # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
-    # 800 timesteps of 20s
-    # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
+    # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7
+    # digits) in roughly 800 timesteps of 20s with SteadyState we only do 1 timestep (t_end should
+    # be slightly smaller than timestep to achieve this)
     t_end = 0.9*op.dt
 
     H = 40  # water depth
 
     # turbine parameters:
-    D = 18  # turbine diameter
+    D = 18     # turbine diameter
     C_T = 0.8  # thrust coefficient
 
     # correction to account for the fact that the thrust coefficient is based on an upstream velocity
-    # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016, eq. (15))
+    # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016,
+    # eq. (15))
     A_T = math.pi*(D/2)**2
     correction = 4/(1+math.sqrt(1-A_T/(H*D)))**2
     # NOTE, that we're not yet correcting power output here, so that will be overestimated
@@ -105,9 +110,9 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     :return: approximate solution to steady state shallow water equations, a posteriori error estimate
     """
-    # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly
-    # 800 timesteps of 20s
-    # with SteadyState we only do 1 timestep (t_end should be slightly smaller than timestep to achieve this)
+    # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7
+    # digits) in roughly 800 timesteps of 20s with SteadyState we only do 1 timestep (t_end should
+    # be slightly smaller than timestep to achieve this)
     t_end = 0.9*op.dt
 
     H = 40. # water depth
@@ -118,11 +123,12 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     inflow = Function(P1).interpolate(as_vector([3., 0.]))
 
     # turbine parameters:
-    D = 18  # turbine diameter
+    D = 18     # turbine diameter
     C_T = 0.8  # thrust coefficient
 
     # correction to account for the fact that the thrust coefficient is based on an upstream velocity
-    # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016, eq. (15))
+    # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016,
+    # eq. (15))
     A_T = math.pi*(D/2)**2
     correction = 4/(1+math.sqrt(1-A_T/(H*D)))**2
     # NOTE, that we're not yet correcting power output here, so that will be overestimated
@@ -311,8 +317,8 @@ if __name__ == "__main__":
         op.gradate = bool(args.g)
     if args.n is not None:
         op.num_adapt = int(args.n)
-    op.order_increase = True       # TODO: ExplicitErrorEstimator needs some work
-    op.viscosity = 1.              # TODO: Increasing this value will smoothen and possibly help adjoint solver
+    #op.order_increase = True  # TODO
+    op.viscosity = 1.
 
     mesh2d = Mesh('channel.msh')
     if op.approach == "FixedMesh":

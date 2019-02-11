@@ -18,6 +18,7 @@ Imperial College London.
     * ``https://github.com/thetisproject/thetis/tree/joe`` for thetis;
     * ``https://github.com/taupalosaurus/firedrake`` for firedrake, fork ``barral/meshadapt``
     and call ``make`` in ``firedrake/src/firedrake`` to enable pragmatic drivers.
+    * ``https://github.com/jwallwork23/adapt_utils`` and add this to ``PYTHONPATH`` environment variable.
 
 * Apply ``misc/keep_params.patch`` to pyadjoint, for an update to the ``linear-solver`` branch.
 

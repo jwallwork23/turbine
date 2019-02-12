@@ -16,7 +16,7 @@ class TurbineOptions(AdaptOptions):
     # Solver parameters
     dt = PositiveFloat(20.).tag(config=True)
     target_vertices = PositiveFloat(1000, help="Target number of vertices").tag(config=True)
-    adapt_field = Unicode('s', help="Adaptation field of interest, from {'s' (speed), 'f' (free surface), 'b' (both)}.").tag(config=True)
+    adapt_field = Unicode('fluid_speed', help="Adaptation field of interest, from {'fluid_speed', 'elevation', 'both'}.").tag(config=True)
     h_min = PositiveFloat(1e-4, help="Minimum element size").tag(config=True)
     h_max = PositiveFloat(10., help="Maximum element size").tag(config=True)
     rescaling = PositiveFloat(0.85, help="Scaling parameter for target number of vertices.").tag(config=True)

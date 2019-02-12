@@ -259,31 +259,35 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
     :return: adapted mesh and associated metric field.
     """
     mesh2d = solver_obj.mesh2d
-    op.target_vertices = mesh2d.num_vertices() * op.rescaling
     P1 = FunctionSpace(mesh2d, "CG", 1)
 
     if op.approach == 'HessianBased':
         uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
-        if op.adapt_field != 'f':       # metric for fluid speed
-            spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
+        if op.adapt_field != 'elevation':       # metric for fluid speed
+            # spd = sqrt(inner(uv_2d, uv_2d))
+            # spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
+            spd = interpolate(sqrt(inner(uv_2d, uv_2d)), P1)  # TODO: Why doesn't project work?
             M = steady_metric(spd, op=op)
-        if op.adapt_field != 's':       # metric for free surface
-            M2 = steady_metric(elev_2d, op=op)
-        if op.adapt_field == 'b':       # intersect metrics for fluid speed and free surface
+        if op.adapt_field != 'fluid_speed':       # metric for free surface
+            # surf = elev_2d
+            # surf = project(elev_2d, P1)
+            surf = interpolate(elev_2d, P1)  # TODO: Why doesn't project work?
+            M2 = steady_metric(surf, op=op)
+        if op.adapt_field == 'both':       # intersect metrics for fluid speed and free surface
             M = metric_intersection(M, M2)
-        elif op.adapt_field == 'f':
+        elif op.adapt_field == 'elevation':
             M = M2
 
     elif op.approach in ('DWP', 'DWR'):
         assert(error_indicator is not None)
         M = isotropic_metric(error_indicator, invert=False, op=op)
 
-    # TODO: Gradation to boundary option
+    if op.intersect_boundary:
+        bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
+        H0 = project(CellSize(mesh2d), P1)
+        M_ = isotropic_metric(H0, bdy=bdy, op=op)  # Initial boundary metric
+        M = metric_intersection(M, M_, bdy=bdy)
     if op.gradate:
-        # bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
-        # H0 = project(CellSize(mesh2d), P1)
-        # M_ = isotropic_metric(H0, bdy=bdy, op=op)  # Initial boundary metric
-        # M = metric_intersection(M, M_, bdy=bdy)
         M = gradate_metric(M, op=op)
 
     if metric is not None:
@@ -300,25 +304,29 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
-    parser.add_argument("-f", help="Choose field to adapt to from {'s', 'f', 'b'}, denoting speed, free surface and both, resp.")
-    parser.add_argument("-g", help="Apply metric gradation")
+    parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
+    parser.add_argument("-field", help="Choose field to adapt to from {'fluid_speed', 'elevation', 'both'}, denoting speed, free surface and both, resp.")
+    parser.add_argument("-gradate", help="Apply metric gradation")
+    parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     args = parser.parse_args()
 
     op = TurbineOptions()
-    if args.a is not None:
-        op.approach = args.a
-    if args.f is not None:
-        op.adapt_field = args.f
-    if args.g is not None:
-        op.gradate = bool(args.g)
+    if args.approach is not None:
+        op.approach = args.approach
+    if args.field is not None:
+        op.adapt_field = args.field
+    if args.gradate is not None:
+        op.gradate = bool(args.gradate)
+    if args.intersect_boundary is not None:
+        op.intersect_boundary = bool(args.intersect_boundary)
     if args.n is not None:
         op.num_adapt = int(args.n)
     #op.order_increase = True  # TODO
     op.viscosity = 1.
 
     mesh2d = Mesh('channel.msh')
+    op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
     M = None
     if op.approach == "FixedMesh":
         solve_turbine(mesh2d, op=op)

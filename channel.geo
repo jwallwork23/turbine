@@ -1,10 +1,12 @@
-W=200.;    // width of channel
+W=200.;   // width of channel
 D=18.;    // turbine diameter
 xt1=50.;  // x location of turbine1
 xt2=400.; // x location of turbine2
 L=1e3;    // length of channel
 dx1=10.;
+//dx1=5.;
 dx2=2.;
+//dx2=1.;
 yt1=W/2;  // y location of turbine1
 yt2=W/2;  // y location of turbine2
 Point(1) = {0., 0., 0., dx1};

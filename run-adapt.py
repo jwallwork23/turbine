@@ -99,7 +99,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
 
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
-    print("Average power = {p:.4e}".format(p=cb.average_power))
+    print("Average power: {p:.4e}".format(p=cb.average_power))
 
     return solver_obj
 
@@ -187,7 +187,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
     J = cb1.average_power
-    print("Average power = {:.4e}".format(J))
+    print("Average power: {:.4e}".format(J))
 
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
@@ -224,10 +224,22 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             P0 = FunctionSpace(mesh2d, "DG", 0)
             cell_res = Function(P0).assign(cell_res)
             edge_res = Function(P0).assign(edge_res)
-
             I = TestFunction(P0)
             h = CellSize(mesh2d)
-            epsilon.project(assemble(I * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
+
+            # [Becker & Rannacher 2001] estimator
+            #omega = assemble(I * (cell_res + edge_res) * dx)
+            #rho = assemble(I * (cell_res * cell_res + (edge_res * edge_res) / sqrt(h)) * dx)
+            #epsilon.project(assemble(I*omega*rho*dx))
+            epsilon.project(assemble(I * (cell_res + edge_res) * dx))
+            # TODO: Global higher-order approximation
+            # TODO: Local higher-order approximation (patchwise interpolation). Use libsupermesh?
+            # TODO: Difference quotient
+
+            # [Ainsworth & Oden 1997] 'explicit' estimator
+            # epsilon.project(assemble(I * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
+
+            print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
         File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)

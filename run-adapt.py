@@ -248,14 +248,15 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     return solver_obj, epsilon
 
 
-def mesh_adapt(solver_obj, error_indicator=None, op=TurbineOptions()):
+def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions()):
     """
     Adapt mesh based on an error indicator or field of interest.
 
-    :param solution: approximate solution of prognostic equations.
+    :arg solver_obj: Thetis FlowSolver2d object.
     :param error_indicator: optional error indicator upon which to adapt.
+    :param metric: If a metric field is provided, it will be intersected.
     :param op: `AdaptOptions` parameter class.
-    :return: adapted mesh.
+    :return: adapted mesh and associated metric field.
     """
     mesh2d = solver_obj.mesh2d
     op.target_vertices = mesh2d.num_vertices() * op.rescaling
@@ -275,20 +276,23 @@ def mesh_adapt(solver_obj, error_indicator=None, op=TurbineOptions()):
 
     elif op.approach in ('DWP', 'DWR'):
         assert(error_indicator is not None)
-        #print("#### DEBUG: error estimator norm = %.4e" % norm(error_indicator))
-
-        # compute metric field
         M = isotropic_metric(error_indicator, invert=False, op=op)
-        if op.gradate:
-            bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
-            H0 = project(CellSize(mesh2d), P1)
-            M_ = isotropic_metric(H0, bdy=bdy, op=op)  # Initial boundary metric
-            M = metric_intersection(M, M_, bdy=bdy)
-            M = gradate_metric(M, op=op)
+
+    # TODO: Gradation to boundary option
+    if op.gradate:
+        # bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
+        # H0 = project(CellSize(mesh2d), P1)
+        # M_ = isotropic_metric(H0, bdy=bdy, op=op)  # Initial boundary metric
+        # M = metric_intersection(M, M_, bdy=bdy)
+        M = gradate_metric(M, op=op)
+
+    if metric is not None:
+        M = metric_intersection(M, metric)
+
     mesh2d = AnisotropicAdaptation(mesh2d, M).adapted_mesh
     print("Number of elements after mesh adaptation: {:d}".format(mesh2d.num_cells()))
 
-    return mesh2d
+    return mesh2d, M
 
 
 if __name__ == "__main__":
@@ -315,6 +319,7 @@ if __name__ == "__main__":
     op.viscosity = 1.
 
     mesh2d = Mesh('channel.msh')
+    M = None
     if op.approach == "FixedMesh":
         solve_turbine(mesh2d, op=op)
     else:
@@ -322,13 +327,18 @@ if __name__ == "__main__":
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
                 solver_obj = solve_turbine(mesh2d, op=op)
-                mesh2d = mesh_adapt(solver_obj, op=op)
+                if M is not None:
+                    M = interp(mesh2d, M)
+                mesh2d, M = mesh_adapt(solver_obj, metric=M, op=op)
         else:
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
                 solver_obj, epsilon = get_error_estimators(mesh2d, op=op)
+                if M is not None:
+                    M = interp(mesh2d, M)
                 with pyadjoint.stop_annotating():
-                    mesh2d = mesh_adapt(solver_obj, epsilon, op=op)
-        uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
-        uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
-        File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)
+                    mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
+        # uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
+        # uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
+        # File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)
+        File(op.directory() + 'AdaptedMesh.pvd').write(mesh2d.coordinates)

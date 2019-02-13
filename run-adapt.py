@@ -304,6 +304,11 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
 if __name__ == "__main__":
 
     import argparse
+    from time import clock
+    import datetime
+
+    now = datetime.datetime.now()
+    date = str(now.day) + '-' + str(now.month) + '-' + str(now.year % 2000)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
@@ -311,6 +316,7 @@ if __name__ == "__main__":
     parser.add_argument("-gradate", help="Apply metric gradation")
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
+    parser.add_argument("-m", help="Toggle additional message for output file")
     args = parser.parse_args()
 
     op = TurbineOptions()
@@ -329,26 +335,71 @@ if __name__ == "__main__":
 
     mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
+
+    f = open(op.directory() + 'data/' + date + '.hdf5', 'a')
+    if args.m is not None:
+        label = input('Description for this run: ')
+        f.write(label+'\n\n')
+    f.write('MESH 0\n')
+    f.write('outer resolution: {:.3f}\n'.format(dt1))
+    f.write('inner resolution: {:.3f}\n'.format(dt2))
+    f.write('mesh elements:    {:d}\n'.format(mesh2d.num_cells()))
+    f.write('mesh edges:       {:d}\n'.format(mesh2d.num_edges()))
+    f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))
+
     M = None
+    tic = clock()
     if op.approach == "FixedMesh":
-        solve_turbine(mesh2d, op=op)
+        with pyadjoint.stop_annotating():
+            solve_turbine(mesh2d, op=op)
     else:
+        File(op.directory() + 'Mesh0.pvd').write(mesh2d.coordinates)
         if op.approach == "HessianBased":
-            for i in range(op.num_adapt):
-                print("Generating solution on mesh {:d}".format(i))
-                solver_obj = solve_turbine(mesh2d, op=op)
-                if M is not None:
-                    M = interp(mesh2d, M)
-                mesh2d, M = mesh_adapt(solver_obj, metric=M, op=op)
+            with pyadjoint.stop_annotating():
+                for i in range(op.num_adapt):
+                    print("Generating solution on mesh {:d}".format(i))
+                    solve_time = clock()
+                    solver_obj = solve_turbine(mesh2d, op=op)
+                    solve_time = clock() - solve_time
+                    adapt_time = clock()
+                    if M is not None:
+                        M = interp(mesh2d, M)
+                    mesh2d, M = mesh_adapt(solver_obj, metric=M, op=op)
+                    adapt_time = clock() - adapt_time
+                    f.write('MESH {:d}\n'.format(i+1))
+                    f.write('mesh elements: {:d}\n'.format(mesh2d.num_cells()))
+                    f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
+                    f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
+                    f.write('solver time:   {:.3f}\n'.format(solve_time))
+                    f.write('adapt time:    {:.3f}\n\n'.format(adapt_time))
+                    File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
         else:
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
+                solve_time = clock()
                 solver_obj, epsilon = get_error_estimators(mesh2d, op=op)
+                solve_time = clock() - solve_time
+                adapt_time = clock()
                 if M is not None:
                     M = interp(mesh2d, M)
                 with pyadjoint.stop_annotating():
                     mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
-        # uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
-        # uv_2d, elev_2d = interp(mesh2d, uv_2d, elev_2d)
-        # File(op.directory() + 'AdaptedMeshSolution.pvd').write(uv_2d, elev_2d)
-        File(op.directory() + 'AdaptedMesh.pvd').write(mesh2d.coordinates)
+                adapt_time = clock() - adapt_time
+                f.write('MESH {:d}\n'.format(i+1))
+                f.write('mesh elements: {:d}\n'.format(mesh2d.num_cells()))
+                f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
+                f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
+                f.write('solver time:   {:.3f}\n'.format(solve_time))
+                f.write('adapt time:    {:.3f}\n'.format(adapt_time))
+                f.write('indicator:     {:.4e}\n\n'.format(norm(epsilon)))
+                File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
+    toc = clock()
+    f.write('SUMMARY\n')
+    f.write('total time:   {:.3f}\n'.format(toc-tic))
+    if op.approach != 'FixedMesh':
+        f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
+        f.write('gradation:    {}\n'.format(op.gradate))
+    if op.approach == 'HessianBased':
+        f.write('adapt field:  {:s}\n'.format(op.adapt_field))
+    f.write('\n\n')
+    f.close()

@@ -17,6 +17,8 @@ W = float(geo.readline().replace(';', '=').split('=')[1])
 D = float(geo.readline().replace(';', '=').split('=')[1])
 xt1 = float(geo.readline().replace(';', '=').split('=')[1])
 xt2 = float(geo.readline().replace(';', '=').split('=')[1])
+dt1 = float(geo.readline().replace(';', '=').split('=')[1])
+dt2 = float(geo.readline().replace(';', '=').split('=')[1])
 geo.close()
 yt1=W/2
 yt2=W/2

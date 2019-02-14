@@ -69,12 +69,15 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     # assign boundary conditions
     left_tag = 1
     right_tag = 2
-    # noslip currently doesn't work (vector Constants are broken in firedrake_adjoint)
-    freeslip_bc = {'un': Constant(0.0)}
+    top_bottom_tag = 3
+    freeslip_bc = {'un': Constant(0.)}
+    noslip_bc = {'uv': Constant((0., 0.))}
     solver_obj.bnd_functions['shallow_water'] = {
         left_tag: {'uv': Constant((3., 0.))},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
-        right_tag: {'elev': Constant(0.)}
+        right_tag: {'elev': Constant(0.)},
+        # top_bottom_tag: freeslip_bc,
+        # top_bottom_tag: noslip_bc,
     }
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
@@ -123,6 +126,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # Vector constants are broken in pyadjoint, so use a vector function instead
     P1 = VectorFunctionSpace(mesh2d, 'CG', 1)
     inflow = Function(P1).interpolate(as_vector([3., 0.]))
+    noslip = Function(P1)
 
     # turbine parameters:
     D = 18     # turbine diameter
@@ -156,13 +160,16 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # assign boundary conditions
     left_tag = 1
     right_tag = 2
-    # noslip currently doesn't work (vector Constants are broken in firedrake_adjoint)
-    freeslip_bc = {'un': Constant(0.0)}
+    top_bottom_tag = 3
+    freeslip_bc = {'un': Constant(0.)}
+    noslip_bc = {'uv': noslip}
     solver_obj.bnd_functions['shallow_water'] = {
-        #left_tag: {'uv': Constant((3., 0.))},
+        # left_tag: {'uv': Constant((3., 0.))},
         left_tag: {'uv': inflow},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
-        right_tag: {'elev': Constant(0.)}
+        right_tag: {'elev': Constant(0.)},
+        # top_bottom_tag: freeslip_bc,
+        # top_bottom_tag: noslip_bc,
     }
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere

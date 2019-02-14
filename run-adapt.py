@@ -8,7 +8,7 @@ import math
 
 from adapt.adaptivity import *
 from adapt.interpolation import interp
-from utils.options import TurbineOptions
+from turbine.options import TurbineOptions
 
 
 # read global variables defining turbines from geo file
@@ -266,14 +266,14 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
     if op.approach == 'HessianBased':
         uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
         if op.adapt_field != 'elevation':       # metric for fluid speed
-            # spd = sqrt(inner(uv_2d, uv_2d))
+            spd = sqrt(inner(uv_2d, uv_2d))
             # spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
-            spd = interpolate(sqrt(inner(uv_2d, uv_2d)), P1)  # TODO: Why doesn't project work?
-            M = steady_metric(spd, op=op)
+            # spd = interpolate(sqrt(inner(uv_2d, uv_2d)), P1)
+            M = steady_metric(spd, mesh=mesh2d, op=op)
         if op.adapt_field != 'fluid_speed':       # metric for free surface
-            # surf = elev_2d
+            surf = elev_2d
             # surf = project(elev_2d, P1)
-            surf = interpolate(elev_2d, P1)  # TODO: Why doesn't project work?
+            # surf = interpolate(elev_2d, P1)
             M2 = steady_metric(surf, op=op)
         if op.adapt_field == 'both':       # intersect metrics for fluid speed and free surface
             M = metric_intersection(M, M2)
@@ -376,8 +376,14 @@ if __name__ == "__main__":
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
                     f.write('adapt time:    {:.3f}\n\n'.format(adapt_time))
                     File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
+                    if not op.intersect:
+                        M = None
         else:
+            eps_norm_ = 1.
+            eps_norm = 0.
+            # while abs(eps_norm_ / eps_norm) - 1. > 1e-4:  TODO: This or #elements converges
             for i in range(op.num_adapt):
+                eps_norm_ = eps_norm
                 print("Generating solution on mesh {:d}".format(i))
                 solve_time = clock()
                 solver_obj, epsilon = get_error_estimators(mesh2d, op=op)
@@ -394,7 +400,8 @@ if __name__ == "__main__":
                 f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                 f.write('solver time:   {:.3f}\n'.format(solve_time))
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                f.write('indicator:     {:.4e}\n\n'.format(norm(epsilon)))
+                eps_norm = norm(epsilon)
+                f.write('indicator:     {:.4e}\n\n'.format(eps_norm))
                 File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
                 if not op.intersect:
                     M = None

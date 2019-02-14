@@ -282,7 +282,7 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
 
     elif op.approach in ('DWP', 'DWR'):
         assert(error_indicator is not None)
-        M = isotropic_metric(error_indicator, invert=False, op=op)
+        M = isotropic_metric(error_indicator, op=op)
 
     if op.intersect_boundary:
         bdy = 'on_boundary'  # use boundary tags to gradate to individual boundaries
@@ -314,6 +314,7 @@ if __name__ == "__main__":
     parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
     parser.add_argument("-field", help="Choose field to adapt to from {'fluid_speed', 'elevation', 'both'}, denoting speed, free surface and both, resp.")
     parser.add_argument("-gradate", help="Apply metric gradation")
+    parser.add_argument("-intersect", help="Intersect with previous metric")
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     parser.add_argument("-m", help="Toggle additional message for output file")
@@ -326,6 +327,8 @@ if __name__ == "__main__":
         op.adapt_field = args.field
     if args.gradate is not None:
         op.gradate = bool(args.gradate)
+    if args.intersect is not None:
+        op.intersect = bool(args.intersect)
     if args.intersect_boundary is not None:
         op.intersect_boundary = bool(args.intersect_boundary)
     if args.n is not None:
@@ -336,7 +339,7 @@ if __name__ == "__main__":
     mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
 
-    f = open(op.directory() + 'data/' + date + '.hdf5', 'a')
+    f = open(op.directory() + 'data/' + date + '.txt', 'a')
     if args.m is not None:
         label = input('Description for this run: ')
         f.write(label+'\n\n')
@@ -393,12 +396,15 @@ if __name__ == "__main__":
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
                 f.write('indicator:     {:.4e}\n\n'.format(norm(epsilon)))
                 File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
+                if not op.intersect:
+                    M = None
     toc = clock()
     f.write('SUMMARY\n')
     f.write('total time:   {:.3f}\n'.format(toc-tic))
     if op.approach != 'FixedMesh':
         f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
         f.write('gradation:    {}\n'.format(op.gradate))
+        f.write('intersect:    {}\n'.format(op.intersect))
     if op.approach == 'HessianBased':
         f.write('adapt field:  {:s}\n'.format(op.adapt_field))
     f.write('\n\n')

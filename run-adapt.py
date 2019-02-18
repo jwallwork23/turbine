@@ -233,20 +233,29 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             P0 = FunctionSpace(mesh2d, "DG", 0)
             cell_res = Function(P0).assign(cell_res)
             edge_res = Function(P0).assign(edge_res)
-            I = TestFunction(P0)
-            h = CellSize(mesh2d)
+            # i = TestFunction(P0)
+            # h = CellSize(mesh2d)
 
             # [Becker & Rannacher 2001] estimator
-            #omega = assemble(I * (cell_res + edge_res) * dx)
-            #rho = assemble(I * (cell_res * cell_res + (edge_res * edge_res) / sqrt(h)) * dx)
-            #epsilon.project(assemble(I*omega*rho*dx))
-            epsilon.project(assemble(I * (cell_res + edge_res) * dx))
+            #omega = assemble(i * (cell_res + edge_res) * dx)
+            #rho = assemble(i * (cell_res * cell_res + (edge_res * edge_res) / sqrt(h)) * dx)
+            #epsilon.project(omega*rho)
+
+            # Adaptive strategies, as in [Rognes & Logg, 2010]
+            if op.dwr_approach == 'error_representation':
+                epsilon.project(cell_res + edge_res)
+            elif op.dwr_approach == 'dwr':
+                epsilon.project(cell_res + jump(edge_res))
+            elif op.dwr_approach == 'cell_facet_split':
+                epsilon.project(cell_res + abs(jump(edge_res)))
+            else:
+                raise ValueError("DWR approach {:s} not recognised.".format(op.dwr_approach))
             # TODO: Global higher-order approximation
             # TODO: Local higher-order approximation (patchwise interpolation). Use libsupermesh?
             # TODO: Difference quotient
 
             # [Ainsworth & Oden 1997] 'explicit' estimator
-            # epsilon.project(assemble(I * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
+            # epsilon.project(assemble(i * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
 
             print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
@@ -325,6 +334,7 @@ if __name__ == "__main__":
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     parser.add_argument("-m", help="Toggle additional message for output file")
+    parser.add_argument("-dwr_approach", help="DWR error estimation approach")
     args = parser.parse_args()
 
     op = TurbineOptions()
@@ -340,6 +350,8 @@ if __name__ == "__main__":
         op.intersect_boundary = bool(args.intersect_boundary)
     if args.n is not None:
         op.num_adapt = int(args.n)
+    if args.dwr_approach is not None:
+        op.dwr_approach = args.dwr_approach
     #op.order_increase = True  # TODO
     op.viscosity = 1.
 
@@ -409,7 +421,11 @@ if __name__ == "__main__":
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
                 eps_norm = norm(epsilon)
                 f.write('indicator:     {:.4e}\n\n'.format(eps_norm))
-                File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
+                if op.approach == 'DWP':
+                    meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
+                else:
+                    meshfile = op.directory() + op.dwr_approach + '_mesh' + str(i+1) + '.pvd'
+                File(meshfile).write(mesh2d.coordinates)
                 if not op.intersect:
                     M = None
     toc = clock()
@@ -419,7 +435,9 @@ if __name__ == "__main__":
         f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
         f.write('gradation:    {}\n'.format(op.gradate))
         f.write('intersect:    {}\n'.format(op.intersect))
-    if op.approach == 'HessianBased':
-        f.write('adapt field:  {:s}\n'.format(op.adapt_field))
+        if op.approach == 'HessianBased':
+            f.write('adapt field:  {:s}\n'.format(op.adapt_field))
+        elif op.approach == 'DWR':
+            f.write('dwr approach: {:s}\n'.format(op.dwr_approach))
     f.write('\n\n')
     f.close()

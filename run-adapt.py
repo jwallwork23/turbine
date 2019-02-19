@@ -17,8 +17,8 @@ W = float(geo.readline().replace(';', '=').split('=')[1])
 D = float(geo.readline().replace(';', '=').split('=')[1])
 xt1 = float(geo.readline().replace(';', '=').split('=')[1])
 xt2 = float(geo.readline().replace(';', '=').split('=')[1])
-dt1 = float(geo.readline().replace(';', '=').split('=')[1])
-dt2 = float(geo.readline().replace(';', '=').split('=')[1])
+dx1 = float(geo.readline().replace(';', '=').split('=')[1])
+dx2 = float(geo.readline().replace(';', '=').split('=')[1])
 L = float(geo.readline().replace(';', '=').split('=')[1])
 geo.close()
 yt1=W/2
@@ -40,8 +40,8 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     H = 40  # water depth
 
     # turbine parameters:
-    D = 18     # turbine diameter
-    C_T = 0.8  # thrust coefficient
+    D = 18                       # turbine diameter
+    C_T = op.thrust_coefficient  # thrust coefficient
 
     # correction to account for the fact that the thrust coefficient is based on an upstream velocity
     # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016,
@@ -133,8 +133,8 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     noslip = Function(P1)
 
     # turbine parameters:
-    D = 18     # turbine diameter
-    C_T = 0.8  # thrust coefficient
+    D = 18                       # turbine diameter
+    C_T = op.thrust_coefficient  # thrust coefficient
 
     # correction to account for the fact that the thrust coefficient is based on an upstream velocity
     # whereas we are using a depth averaged at-the-turbine velocity (see Kramer and Piggott 2016,
@@ -207,7 +207,6 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # Plot source term for adjoint equation
     if op.approach == 'AdjointOnly':
         u = solver_obj.fields.uv_2d
-        P1 = VectorFunctionSpace(mesh2d, "CG", 1)
         unormu = project(u*sqrt(inner(u,u)), P1)
         unormu.rename("Source term for adjoint equation")
         File(op.directory() + 'AdjointSource2d.pvd').write(unormu)
@@ -350,7 +349,8 @@ if __name__ == "__main__":
     parser.add_argument("-gradate", help="Apply metric gradation")
     parser.add_argument("-intersect", help="Intersect with previous metric")
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
-    parser.add_argument("-drag_coefficient", help="Set drag coefficient C_d (default 0.0025)")
+    parser.add_argument("-drag_coefficient", help="Set drag coefficient C_D (default 0.0025)")
+    parser.add_argument("-thrust_coefficient", help="Set thrust coefficient C_T (default 0.8)")
     parser.add_argument("-bc", help="Set North and South boundary conditions, from {None, 'freeslip', 'noslip'}")
     parser.add_argument("-viscosity", help="Set fluid viscosity (default 1.)")
     parser.add_argument("-uniform_mesh", help="Start with a uniform mesh")
@@ -371,6 +371,8 @@ if __name__ == "__main__":
         op.intersect_boundary = bool(args.intersect_boundary)
     if args.drag_coefficient is not None:
         op.drag_coefficient = float(args.drag_coefficient)
+    if args.thrust_coefficient is not None:
+        op.thrust_coefficient = float(args.thrust_coefficient)
     if args.viscosity is not None:
         op.viscosity = float(args.viscosity)
     if args.bc is not None:
@@ -385,7 +387,7 @@ if __name__ == "__main__":
 
     if uniform:
         #mesh2d = RectangleMesh(100, 20, L, W)
-        mesh2d = RectangleMesh(1000, 200, L, W)
+        mesh2d = RectangleMesh(500, 100, L, W)
     else:
         mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
@@ -396,8 +398,8 @@ if __name__ == "__main__":
             label = input('Description for this run: ')
             f.write(label+'\n\n')
         f.write('MESH 0\n')
-        f.write('outer resolution: {:.3f}\n'.format(dt1))
-        f.write('inner resolution: {:.3f}\n'.format(dt2))
+        f.write('outer resolution: {:.3f}\n'.format(dx1))
+        f.write('inner resolution: {:.3f}\n'.format(dx2))
         f.write('mesh elements:    {:d}\n'.format(mesh2d.num_cells()))
         f.write('mesh edges:       {:d}\n'.format(mesh2d.num_edges()))
         f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))

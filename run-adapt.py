@@ -76,9 +76,11 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
         left_tag: {'uv': Constant((3., 0.))},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)},
-        # top_bottom_tag: freeslip_bc,
-        # top_bottom_tag: noslip_bc,
     }
+    if op.north_south_bc == 'freeslip':
+        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = freeslip_bc
+    elif op.north_south_bc == 'noslip':
+        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = noslip_bc
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
@@ -168,9 +170,11 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         left_tag: {'uv': inflow},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)},
-        # top_bottom_tag: freeslip_bc,
-        # top_bottom_tag: noslip_bc,
     }
+    if op.north_south_bc == 'freeslip':
+        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = freeslip_bc
+    elif op.north_south_bc == 'noslip':
+        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = noslip_bc
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
@@ -337,14 +341,17 @@ if __name__ == "__main__":
     date = str(now.day) + '-' + str(now.month) + '-' + str(now.year % 2000)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh')")
+    parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh'). Option 'AdjointOnly' allows to just look at adjoint solution.")
+    parser.add_argument("-dwr_approach", help="DWR error estimation approach")
     parser.add_argument("-field", help="Choose field to adapt to from {'fluid_speed', 'elevation', 'both'}, denoting speed, free surface and both, resp.")
     parser.add_argument("-gradate", help="Apply metric gradation")
     parser.add_argument("-intersect", help="Intersect with previous metric")
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
+    parser.add_argument("-drag_coefficient", help="Set drag coefficient C_d (default 0.0025)")
+    parser.add_argument("-bc", help="Set North and South boundary conditions, from {None, 'freeslip', 'noslip'}")
+    parser.add_argument("-viscosity", help="Set fluid viscosity (default 1.)")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     parser.add_argument("-m", help="Toggle additional message for output file")
-    parser.add_argument("-dwr_approach", help="DWR error estimation approach")
     args = parser.parse_args()
 
     op = TurbineOptions()

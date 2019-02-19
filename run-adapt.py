@@ -107,9 +107,10 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
 
     solver_obj.assign_initial_conditions(uv=as_vector((3.0, 0.0)))
     solver_obj.iterate()
-    print("Average power: {p:.4e}".format(p=cb.average_power))
+    J = cb.average_power
+    print("Average power: {p:.4e}".format(p=J))
 
-    return solver_obj
+    return J
 
 
 def get_error_estimators(mesh2d, op=TurbineOptions()):
@@ -279,7 +280,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
         tape.clear_tape()
 
-    return solver_obj, epsilon
+    return solver_obj, epsilon, J
 
 
 def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions()):
@@ -405,7 +406,8 @@ if __name__ == "__main__":
     tic = clock()
     if op.approach == "FixedMesh":
         with pyadjoint.stop_annotating():
-            solve_turbine(mesh2d, op=op)
+            J = solve_turbine(mesh2d, op=op)
+            f.write('objective val: {:.4e}\n'.format(J))
     elif op.approach == 'AdjointOnly':
         get_error_estimators(mesh2d, op=op)
     else:
@@ -415,7 +417,7 @@ if __name__ == "__main__":
                 for i in range(op.num_adapt):
                     print("Generating solution on mesh {:d}".format(i))
                     solve_time = clock()
-                    solver_obj = solve_turbine(mesh2d, op=op)
+                    solver_obj, J = solve_turbine(mesh2d, op=op)
                     solve_time = clock() - solve_time
                     adapt_time = clock()
                     if M is not None:
@@ -427,19 +429,17 @@ if __name__ == "__main__":
                     f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
                     f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
-                    f.write('adapt time:    {:.3f}\n\n'.format(adapt_time))
+                    f.write('adapt time:    {:.3f}\n'.format(adapt_time))
+                    f.write('objective val: {:.4e}\n\n'.format(J))
                     File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
                     if not op.intersect:
                         M = None
         else:
-            eps_norm_ = 1.
-            eps_norm = 0.
-            # while abs(eps_norm_ / eps_norm) - 1. > 1e-4:  TODO: This or #elements converges
+            # TODO: Stopping criteria: #elements or J converges
             for i in range(op.num_adapt):
-                eps_norm_ = eps_norm
                 print("Generating solution on mesh {:d}".format(i))
                 solve_time = clock()
-                solver_obj, epsilon = get_error_estimators(mesh2d, op=op)
+                solver_obj, epsilon, J = get_error_estimators(mesh2d, op=op)
                 solve_time = clock() - solve_time
                 adapt_time = clock()
                 if M is not None:
@@ -453,8 +453,8 @@ if __name__ == "__main__":
                 f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                 f.write('solver time:   {:.3f}\n'.format(solve_time))
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                eps_norm = norm(epsilon)
-                f.write('indicator:     {:.4e}\n\n'.format(eps_norm))
+                f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
+                f.write('objective val: {:.4e}\n\n'.format(J))
                 if op.approach == 'DWP':
                     meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
                 else:
@@ -468,7 +468,8 @@ if __name__ == "__main__":
         f.write('total time:   {:.3f}\n'.format(toc-tic))
         f.write('viscosity:    {:.3f}\n'.format(op.viscosity))
         f.write('drag coeff.:  {:.3f}\n'.format(op.drag_coefficient))
-        f.write('N/S bcs:      {:s}\n'.format(op.north_south_bc))
+        if op.north_south_bc is not None:
+            f.write('N/S bcs:      {:s}\n'.format(op.north_south_bc))
         if op.approach != 'FixedMesh':
             f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
             f.write('gradation:    {}\n'.format(op.gradate))

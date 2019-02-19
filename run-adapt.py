@@ -198,6 +198,13 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     J = cb1.average_power
     print("Average power: {:.4e}".format(J))
 
+    # Plot source term for adjoint equation
+    if op.approach == 'AdjointOnly':
+        u = solver_obj.fields.uv_2d
+        P1 = VectorFunctionSpace(mesh2d, "CG", 1)
+        unormu = project(u*sqrt(inner(u,u)), P1)
+        File(op.directory() + 'AdjointSource2d.pvd').write(unormu)
+
     compute_gradient(J, Control(H_const))
     tape = get_working_tape()
     solve_blocks = [block for block in tape._blocks if isinstance(block, SolveBlock)
@@ -217,10 +224,13 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         adj_u.rename('adjoint_velocity_2d')
         adj_eta.rename('adjoint_elev_2d')
         File(op.directory() + "AdjointSolution2d.pvd").write(adj_u, adj_eta)
-        P1 = FunctionSpace(mesh2d, "CG", 1)
-        epsilon = Function(P1)
+
+        if op.approach == 'AdjointOnly':
+            return
 
         # Form error indicator
+        P1 = FunctionSpace(mesh2d, "CG", 1)
+        epsilon = Function(P1)
         if op.approach == "DWP":
             epsilon.project(inner(solver_obj.fields.solution_2d, adjoint))
         else:
@@ -348,32 +358,39 @@ if __name__ == "__main__":
         op.intersect = bool(args.intersect)
     if args.intersect_boundary is not None:
         op.intersect_boundary = bool(args.intersect_boundary)
+    if args.drag_coefficient is not None:
+        op.drag_coefficient = float(args.drag_coefficient)
+    if args.viscosity is not None:
+        op.viscosity = float(args.viscosity)
+    if args.bc is not None:
+        op.north_south_bc = args.bc
     if args.n is not None:
         op.num_adapt = int(args.n)
     if args.dwr_approach is not None:
         op.dwr_approach = args.dwr_approach
-    #op.order_increase = True  # TODO
-    op.viscosity = 1.
 
     mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
 
-    f = open(op.directory() + 'data/' + date + '.txt', 'a')
-    if args.m is not None:
-        label = input('Description for this run: ')
-        f.write(label+'\n\n')
-    f.write('MESH 0\n')
-    f.write('outer resolution: {:.3f}\n'.format(dt1))
-    f.write('inner resolution: {:.3f}\n'.format(dt2))
-    f.write('mesh elements:    {:d}\n'.format(mesh2d.num_cells()))
-    f.write('mesh edges:       {:d}\n'.format(mesh2d.num_edges()))
-    f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))
+    if op.approach != 'AdjointOnly':
+        f = open(op.directory() + 'data/' + date + '.txt', 'a')
+        if args.m is not None:
+            label = input('Description for this run: ')
+            f.write(label+'\n\n')
+        f.write('MESH 0\n')
+        f.write('outer resolution: {:.3f}\n'.format(dt1))
+        f.write('inner resolution: {:.3f}\n'.format(dt2))
+        f.write('mesh elements:    {:d}\n'.format(mesh2d.num_cells()))
+        f.write('mesh edges:       {:d}\n'.format(mesh2d.num_edges()))
+        f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))
 
     M = None
     tic = clock()
     if op.approach == "FixedMesh":
         with pyadjoint.stop_annotating():
             solve_turbine(mesh2d, op=op)
+    elif op.approach == 'AdjointOnly':
+        get_error_estimators(mesh2d, op=op)
     else:
         File(op.directory() + 'Mesh0.pvd').write(mesh2d.coordinates)
         if op.approach == "HessianBased":
@@ -428,16 +445,20 @@ if __name__ == "__main__":
                 File(meshfile).write(mesh2d.coordinates)
                 if not op.intersect:
                     M = None
-    toc = clock()
-    f.write('SUMMARY\n')
-    f.write('total time:   {:.3f}\n'.format(toc-tic))
-    if op.approach != 'FixedMesh':
-        f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
-        f.write('gradation:    {}\n'.format(op.gradate))
-        f.write('intersect:    {}\n'.format(op.intersect))
-        if op.approach == 'HessianBased':
-            f.write('adapt field:  {:s}\n'.format(op.adapt_field))
-        elif op.approach == 'DWR':
-            f.write('dwr approach: {:s}\n'.format(op.dwr_approach))
-    f.write('\n\n')
-    f.close()
+    if op.approach != 'AdjointOnly':
+        toc = clock()
+        f.write('SUMMARY\n')
+        f.write('total time:   {:.3f}\n'.format(toc-tic))
+        f.write('viscosity:    {:.3f}\n'.format(op.viscosity))
+        f.write('drag coeff.:  {:.3f}\n'.format(op.drag_coefficient))
+        f.write('N/S bcs:      {:s}\n'.format(op.north_south_bc))
+        if op.approach != 'FixedMesh':
+            f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
+            f.write('gradation:    {}\n'.format(op.gradate))
+            f.write('intersect:    {}\n'.format(op.intersect))
+            if op.approach == 'HessianBased':
+                f.write('adapt field:  {:s}\n'.format(op.adapt_field))
+            elif op.approach == 'DWR':
+                f.write('dwr approach: {:s}\n'.format(op.dwr_approach))
+        f.write('\n\n')
+        f.close()

@@ -18,6 +18,7 @@ outdirs:
 	mkdir outputs/DWR
 	mkdir outputs/DWR/data
 	mkdir outputs/DWR/hdf5
+	mkdir outputs/AdjointOnly
 
 clean:
 	rm -Rf outputs

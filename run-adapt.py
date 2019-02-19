@@ -19,6 +19,7 @@ xt1 = float(geo.readline().replace(';', '=').split('=')[1])
 xt2 = float(geo.readline().replace(';', '=').split('=')[1])
 dt1 = float(geo.readline().replace(';', '=').split('=')[1])
 dt2 = float(geo.readline().replace(';', '=').split('=')[1])
+L = float(geo.readline().replace(';', '=').split('=')[1])
 geo.close()
 yt1=W/2
 yt2=W/2
@@ -207,6 +208,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         u = solver_obj.fields.uv_2d
         P1 = VectorFunctionSpace(mesh2d, "CG", 1)
         unormu = project(u*sqrt(inner(u,u)), P1)
+        unormu.rename("Source term for adjoint equation")
         File(op.directory() + 'AdjointSource2d.pvd').write(unormu)
 
     compute_gradient(J, Control(H_const))
@@ -350,6 +352,7 @@ if __name__ == "__main__":
     parser.add_argument("-drag_coefficient", help="Set drag coefficient C_d (default 0.0025)")
     parser.add_argument("-bc", help="Set North and South boundary conditions, from {None, 'freeslip', 'noslip'}")
     parser.add_argument("-viscosity", help="Set fluid viscosity (default 1.)")
+    parser.add_argument("-uniform_mesh", help="Start with a uniform mesh")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     parser.add_argument("-m", help="Toggle additional message for output file")
     args = parser.parse_args()
@@ -375,8 +378,15 @@ if __name__ == "__main__":
         op.num_adapt = int(args.n)
     if args.dwr_approach is not None:
         op.dwr_approach = args.dwr_approach
+    uniform = False
+    if args.uniform_mesh is not None:
+        uniform = bool(args.uniform_mesh)
 
-    mesh2d = Mesh('channel.msh')
+    if uniform:
+        #mesh2d = RectangleMesh(100, 20, L, W)
+        mesh2d = RectangleMesh(1000, 200, L, W)
+    else:
+        mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
 
     if op.approach != 'AdjointOnly':

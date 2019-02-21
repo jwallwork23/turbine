@@ -87,14 +87,20 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
     # and 0 outside
-    P1DG = FunctionSpace(mesh2d, "DG", 0)
-    x, y = SpatialCoordinate(mesh2d)
-    turbine_density = Function(P1DG)    # note pyadjoint can't deal with coordinateless functions
-    turbine_density.interpolate(conditional(
-        Or(
-            And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
-            And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
-        ), 1.0 / D ** 2, 0))
+    # x, y = SpatialCoordinate(mesh2d)
+    # P1DG = FunctionSpace(mesh2d, "DG", 0)
+    # turbine_density = Function(P1DG)  # note pyadjoint can't deal with coordinateless functions
+    # turbine_density.interpolate(conditional(
+    #     Or(
+    #         And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
+    #         And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
+    #     ), 1.0 / D ** 2, 0))
+
+    # Use bump, rather than indicator, function
+    op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]
+    turbine_density = op.bump(mesh2d, scale=1./D**2)
+    File(op.directory()+'Bump.pvd').write(turbine_density)
+
     farm_options = TidalTurbineFarmOptions()
     farm_options.turbine_density = turbine_density
     farm_options.turbine_options.diameter = D
@@ -183,14 +189,20 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
     # and 0 outside
-    P1DG = FunctionSpace(mesh2d, "DG", 0)
-    x, y = SpatialCoordinate(mesh2d)
-    turbine_density = Function(P1DG)  # note pyadjoint can't deal with coordinateless functions
-    turbine_density.interpolate(conditional(
-        Or(
-            And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
-            And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
-        ), 1.0 / D ** 2, 0))
+    # x, y = SpatialCoordinate(mesh2d)
+    # P1DG = FunctionSpace(mesh2d, "DG", 1)
+    # turbine_density = Function(P1DG)  # note pyadjoint can't deal with coordinateless functions
+    # turbine_density.interpolate(conditional(
+    #     Or(
+    #         And(And(gt(x, xt1 - D / 2), lt(x, xt1 + D / 2)), And(gt(y, yt1 - D / 2), lt(y, yt1 + D / 2))),
+    #         And(And(gt(x, xt2 - D / 2), lt(x, xt2 + D / 2)), And(gt(y, yt2 - D / 2), lt(y, yt2 + D / 2)))
+    #     ), 1.0 / D ** 2, 0))
+
+    # Use bump, rather than indicator, function
+    op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]
+    turbine_density = op.bump(mesh2d, scale=1./D**2)
+    File(op.directory()+'Bump.pvd').write(turbine_density)
+
     farm_options = TidalTurbineFarmOptions()
     farm_options.turbine_density = turbine_density
     farm_options.turbine_options.diameter = D

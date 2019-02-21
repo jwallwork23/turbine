@@ -67,7 +67,7 @@ solver_obj.bnd_functions['shallow_water'] = {
 # we haven't meshed the turbines with separate ids, so define a farm everywhere
 # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
 # and 0 outside
-P1DG = FunctionSpace(mesh2d, "DG", 0)
+P1DG = FunctionSpace(mesh2d, "DG", 1)
 x, y = SpatialCoordinate(mesh2d)
 turbine_density = interpolate(conditional(
     Or(

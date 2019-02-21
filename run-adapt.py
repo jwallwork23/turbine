@@ -72,17 +72,13 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     left_tag = 1
     right_tag = 2
     top_bottom_tag = 3
-    freeslip_bc = {'un': Constant(0.)}
     noslip_bc = {'uv': Constant((0., 0.))}
     solver_obj.bnd_functions['shallow_water'] = {
         left_tag: {'uv': Constant((3., 0.))},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)},
+        top_bottom_tag: noslip_bc,
     }
-    if op.north_south_bc == 'freeslip':
-        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = freeslip_bc
-    elif op.north_south_bc == 'noslip':
-        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = noslip_bc
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
@@ -98,7 +94,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
 
     # Use bump, rather than indicator, function
     op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]
-    turbine_density = op.bump(mesh2d, scale=1./D**2)
+    turbine_density = op.bump(mesh2d, scale=len(op.region_of_interest)/assemble(op.bump(mesh2d)*dx))
     File(op.directory()+'Bump.pvd').write(turbine_density)
 
     farm_options = TidalTurbineFarmOptions()
@@ -173,18 +169,14 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     left_tag = 1
     right_tag = 2
     top_bottom_tag = 3
-    freeslip_bc = {'un': Constant(0.)}
     noslip_bc = {'uv': noslip}
     solver_obj.bnd_functions['shallow_water'] = {
         # left_tag: {'uv': Constant((3., 0.))},
         left_tag: {'uv': inflow},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)},
+        top_bottom_tag: noslip_bc,
     }
-    if op.north_south_bc == 'freeslip':
-        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = freeslip_bc
-    elif op.north_south_bc == 'noslip':
-        solver_obj.bnd_functions['shallow_water'][top_bottom_tag] = noslip_bc
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
     # and make it have a density of 1/D^2 inside the two DxD squares where the turbines are
@@ -200,7 +192,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
 
     # Use bump, rather than indicator, function
     op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]
-    turbine_density = op.bump(mesh2d, scale=1./D**2)
+    turbine_density = op.bump(mesh2d, scale=len(op.region_of_interest)/assemble(op.bump(mesh2d)*dx))
     File(op.directory()+'Bump.pvd').write(turbine_density)
 
     farm_options = TidalTurbineFarmOptions()
@@ -297,7 +289,10 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
-        File(op.directory() + op.dwr_approach + "indicator.pvd").write(epsilon, cell_res, edge_res)  # TODO: all steps
+        if op.approach == 'DWR':
+            File(op.directory() + op.dwr_approach + "indicator.pvd").write(epsilon, cell_res, edge_res)  # TODO: all steps
+        else:
+            File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)  # TODO: all steps
         tape.clear_tape()
 
     return solver_obj, epsilon, J
@@ -372,7 +367,6 @@ if __name__ == "__main__":
     parser.add_argument("-intersect_boundary", help="Intersect with initial boundary metric")
     parser.add_argument("-drag_coefficient", help="Set drag coefficient C_D (default 0.0025)")
     parser.add_argument("-thrust_coefficient", help="Set thrust coefficient C_T (default 0.8)")
-    parser.add_argument("-bc", help="Set North and South boundary conditions, from {None, 'freeslip', 'noslip'}")
     parser.add_argument("-viscosity", help="Set fluid viscosity (default 1.)")
     parser.add_argument("-uniform_mesh", help="Start with a uniform mesh")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
@@ -396,8 +390,6 @@ if __name__ == "__main__":
         op.thrust_coefficient = float(args.thrust_coefficient)
     if args.viscosity is not None:
         op.viscosity = float(args.viscosity)
-    if args.bc is not None:
-        op.north_south_bc = args.bc
     if args.n is not None:
         op.num_adapt = int(args.n)
     if args.dwr_approach is not None:
@@ -491,8 +483,6 @@ if __name__ == "__main__":
         f.write('total time:   {:.3f}\n'.format(toc-tic))
         f.write('viscosity:    {:.3f}\n'.format(op.viscosity))
         f.write('drag coeff.:  {:.3f}\n'.format(op.drag_coefficient))
-        if op.north_south_bc is not None:
-            f.write('N/S bcs:      {:s}\n'.format(op.north_south_bc))
         if op.approach != 'FixedMesh':
             f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
             f.write('gradation:    {}\n'.format(op.gradate))

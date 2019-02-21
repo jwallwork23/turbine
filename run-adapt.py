@@ -58,6 +58,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     options.simulation_end_time = t_end
     options.output_directory = op.directory()
     options.check_volume_conservation_2d = True
+    options.use_grad_div_viscosity_term = op.symmetric_viscosity
     options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
@@ -151,6 +152,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     options.simulation_end_time = t_end
     options.output_directory = op.directory()
     options.check_volume_conservation_2d = True
+    options.use_grad_div_viscosity_term = op.symmetric_viscosity
     options.compute_residuals = op.approach == 'DWR'
     options.element_family = op.family
     options.timestepper_type = 'SteadyState'
@@ -247,36 +249,43 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             edge_res = ts.edge_residual(adjoint)
             print("Edge residual: {:.4e}".format(norm(edge_res)))
             P0 = FunctionSpace(mesh2d, "DG", 0)
-            cell_res = Function(P0).assign(cell_res)
-            edge_res = Function(P0).assign(edge_res)
-            # i = TestFunction(P0)
-            # h = CellSize(mesh2d)
+            cell_res = Function(P0, name='cell_residual_2d').assign(cell_res)
+            edge_res = Function(P0, name='edge_residual_2d').assign(edge_res)
+            i = TestFunction(P0)
+            h = CellSize(mesh2d)
 
-            # [Becker & Rannacher 2001] estimator
-            #omega = assemble(i * (cell_res + edge_res) * dx)
-            #rho = assemble(i * (cell_res * cell_res + (edge_res * edge_res) / sqrt(h)) * dx)
-            #epsilon.project(omega*rho)
+            # [Ainsworth & Oden 1997] 'explicit' estimator
+            if op.dwr_approach == 'AO97':
+                epsilon.project(assemble(i * (h * h * cell_res * cell_res + h * edge_res * edge_res) * dx))
+            else:
 
             # Adaptive strategies, as in [Rognes & Logg, 2010]
-            if op.dwr_approach == 'error_representation':
-                epsilon.project(cell_res + edge_res)
-            elif op.dwr_approach == 'dwr':
-                epsilon.project(cell_res + jump(edge_res))
-            elif op.dwr_approach == 'cell_facet_split':
-                epsilon.project(cell_res + abs(jump(edge_res)))
-            else:
-                raise ValueError("DWR approach {:s} not recognised.".format(op.dwr_approach))
+                if op.dwr_approach == 'error_representation':
+                    epsilon.project(cell_res + edge_res)
+                elif op.dwr_approach == 'dwr':
+                    # v = TestFunction(P1)
+                    # flux_terms = jump(edge_res)*v*dS
+                    # r = TrialFunction(P1)
+                    # mass_term = r*v*dx
+                    # r = Function(P1)
+                    # solve(mass_term == flux_terms, r)
+                    # epsilon.project(cell_res)
+                    # epsilon.dat.data[:] += r.dat.data
+                    edge_res.project(jump(edge_res))  # FIXME
+                    epsilon.project(cell_res + edge_res)
+                elif op.dwr_approach == 'cell_facet_split':
+                    edge_res.project(abs(jump(edge_res)))  # FIXME
+                    epsilon.project(cell_res + edge_res)
+                else:
+                    raise ValueError("DWR approach {:s} not recognised.".format(op.dwr_approach))
             # TODO: Global higher-order approximation
             # TODO: Local higher-order approximation (patchwise interpolation). Use libsupermesh?
             # TODO: Difference quotient
 
-            # [Ainsworth & Oden 1997] 'explicit' estimator
-            # epsilon.project(assemble(i * (h * h * inner(cell_res, cell_res) + h * inner(edge_res, edge_res)) * dx))
-
             print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
-        File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)
+        File(op.directory() + op.dwr_approach + "indicator.pvd").write(epsilon, cell_res, edge_res)  # TODO: all steps
         tape.clear_tape()
 
     return solver_obj, epsilon, J

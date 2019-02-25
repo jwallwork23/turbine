@@ -242,6 +242,38 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
         File(op.directory() + "AdjointSolution2d.pvd").write(adj_u, adj_eta)
 
         if op.approach == 'AdjointOnly':
+            print("#### DEBUG: Checking boundary conditions from continuous adjoint derivation")
+            P0 = FunctionSpace(mesh2d, "DG", 0)
+            P0_vec = VectorFunctionSpace(mesh2d, "DG", 0)
+            i = TestFunction(P0)
+            i_vec = TestFunction(P0_vec)
+            n = FacetNormal(mesh2d)
+            g = physical_constants['g_grav']
+            nu = options.horizontal_viscosity
+            z, zeta = adjoint.split()
+            u, eta = solver_obj.fields.solution_2d.split()
+
+            bc1 = assemble(inner(i_vec,u-inflow)*ds(1))
+            bc2 = assemble(i*eta*ds(2))
+            bc3 = assemble(i*dot(u,n)*ds(3))
+            print('bc1: {:.4e} {:.4e}'.format(max(bc1.dat.data[:,0]), max(bc1.dat.data[:,1])))
+            print('bc2: {:.4e}'.format(max(bc2.dat.data)))
+            print('bc3: {:.4e}'.format(max(bc3.dat.data)))
+
+            bc0_1 = assemble(inner(i_vec, z) * ds(1))
+            bc0_2 = assemble(inner(i_vec, z) * ds(2))
+            bc0_3 = assemble(inner(i_vec, z) * ds(3))
+            bc13_expr = zeta*dot(u, n) + g*dot(z, n)
+            bc1 = assemble(i*abs(bc13_expr)*ds(1))
+            bc2_expr = zeta*(H_const + eta)*n + z*dot(u, n) - nu*dot(nabla_grad(z), n)
+            bc2 = assemble(inner(i_vec, bc2_expr)*ds(2))
+            bc3 = assemble(i*abs(bc13_expr)*ds(3))
+            print('bc0_1: {:.4e} {:.4e}'.format(max(bc0_1.dat.data[:,0]), max(bc0_1.dat.data[:,1])))
+            print('bc0_2: {:.4e} {:.4e}'.format(max(bc0_2.dat.data[:,0]), max(bc0_2.dat.data[:,1])))
+            print('bc0_3: {:.4e} {:.4e}'.format(max(bc0_3.dat.data[:,0]), max(bc0_3.dat.data[:,1])))
+            print('bc1: {:.4e}'.format(max(bc1.dat.data)))
+            print('bc2: {:.4e} {:.4e}'.format(max(bc2.dat.data[:,0]), max(bc2.dat.data[:,1])))
+            print('bc3: {:.4e}'.format(max(bc3.dat.data)))
             return
 
         # Form error indicator

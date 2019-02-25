@@ -72,12 +72,14 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     left_tag = 1
     right_tag = 2
     top_bottom_tag = 3
-    noslip_bc = {'uv': Constant((0., 0.))}
+    # noslip_bc = {'uv': Constant((0., 0.))}
+    freeslip_bc = {'un': Constant(0.)}
     solver_obj.bnd_functions['shallow_water'] = {
         left_tag: {'uv': Constant((3., 0.))},
         # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
         right_tag: {'elev': Constant(0.)},
-        top_bottom_tag: noslip_bc,
+        # top_bottom_tag: noslip_bc,
+        top_bottom_tag: freeslip_bc,
     }
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
@@ -113,7 +115,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     J = cb.average_power
     print("Average power: {p:.4e}".format(p=J))
 
-    return J
+    return solver_obj, J
 
 
 def get_error_estimators(mesh2d, op=TurbineOptions()):
@@ -170,12 +172,14 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     right_tag = 2
     top_bottom_tag = 3
     noslip_bc = {'uv': noslip}
+    freeslip_bc = {'un': Constant(0.)}
     solver_obj.bnd_functions['shallow_water'] = {
         # left_tag: {'uv': Constant((3., 0.))},
         left_tag: {'uv': inflow},
-        # right_tag: {'un': Constant(3.), 'elev': Constant(0.)}
+        # right_tag: {'un': Constant(3.), 'elev': Constant(0.)},
         right_tag: {'elev': Constant(0.)},
-        top_bottom_tag: noslip_bc,
+        # top_bottom_tag: noslip_bc,
+        top_bottom_tag: freeslip_bc,
     }
 
     # we haven't meshed the turbines with separate ids, so define a farm everywhere
@@ -313,12 +317,12 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
 
     if op.approach == 'HessianBased':
         uv_2d, elev_2d = solver_obj.fields.solution_2d.split()
-        if op.adapt_field != 'elevation':       # metric for fluid speed
+        if op.adapt_field in('fluid_speed', 'both'):  # metric for fluid speed
             spd = sqrt(inner(uv_2d, uv_2d))
             # spd = project(sqrt(inner(uv_2d, uv_2d)), P1)
             # spd = interpolate(sqrt(inner(uv_2d, uv_2d)), P1)
             M = steady_metric(spd, mesh=mesh2d, op=op)
-        if op.adapt_field != 'fluid_speed':       # metric for free surface
+        if op.adapt_field in ('elevation', 'both'):   # metric for free surface
             surf = elev_2d
             # surf = project(elev_2d, P1)
             # surf = interpolate(elev_2d, P1)
@@ -327,6 +331,11 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
             M = metric_intersection(M, M2)
         elif op.adapt_field == 'elevation':
             M = M2
+        elif op.adapt_field == 'fluid_speed_x':
+            spd = uv_2d[0]
+            M = steady_metric(spd, mesh=mesh2d, op=op)
+        elif op.adapt_field != 'fluid_speed':
+            raise ValueError("Field for adaptation {:s} not recognised.".format(op.adapt_field))
 
     elif op.approach in ('DWP', 'DWR'):
         assert(error_indicator is not None)
@@ -421,7 +430,7 @@ if __name__ == "__main__":
     tic = clock()
     if op.approach == "FixedMesh":
         with pyadjoint.stop_annotating():
-            J = solve_turbine(mesh2d, op=op)
+            J = solve_turbine(mesh2d, op=op)[1]
             f.write('objective val: {:.4e}\n'.format(J))
     elif op.approach == 'AdjointOnly':
         get_error_estimators(mesh2d, op=op)
@@ -446,7 +455,8 @@ if __name__ == "__main__":
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
                     f.write('adapt time:    {:.3f}\n'.format(adapt_time))
                     f.write('objective val: {:.4e}\n\n'.format(J))
-                    File(op.directory() + 'Mesh' + str(i+1) + '.pvd').write(mesh2d.coordinates)
+                    meshfile = op.directory() + op.adapt_field + '_mesh' + str(i+1) + '.pvd'
+                    File(meshfile).write(mesh2d.coordinates)
                     if not op.intersect:
                         M = None
         else:

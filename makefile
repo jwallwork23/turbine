@@ -12,6 +12,9 @@ outdirs:
 	mkdir outputs/HessianBased
 	mkdir outputs/HessianBased/hdf5
 	mkdir outputs/HessianBased/data
+	mkdir outputs/Vorticity
+	mkdir outputs/Vorticity/hdf5
+	mkdir outputs/Vorticity/data
 	mkdir outputs/DWP
 	mkdir outputs/DWP/hdf5
 	mkdir outputs/DWP/data

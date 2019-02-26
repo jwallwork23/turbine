@@ -27,10 +27,11 @@ yt2=W/2
 
 def solve_turbine(mesh2d, op=TurbineOptions()):
     """
-    Solve steady state shallow water equations on mesh `mesh2d`, using `AdaptOptions` parameter
-    class `op`.
+    Solve steady state shallow water equations on a given mesh.
 
-    :return: approximate solution tuple for steady state shallow water equations.
+    :arg mesh2d: mesh upon which to solve the shallow water problem.
+    :param op: `AdaptOptions` parameter class.
+    :return: Thetis `FlowSolver2d` object containing solution fields; objective functional, as computed on `mesh2d`.
     """
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7
     # digits) in roughly 800 timesteps of 20s with SteadyState we only do 1 timestep (t_end should
@@ -122,9 +123,12 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
 
 def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
     """
-    Generate a posteriori error indicators on mesh `mesh2d` using `AdaptOptions` parameter class `op`.
+    Generate a posteriori error indicators of type 'DWP' or 'DWR' on a given mesh.
 
-    :return: approximate solution to steady state shallow water equations, a posteriori error estimate
+    :arg mesh2d: mesh upon which to solve the shallow water problem.
+    :param iteration: current iteration in outer mesh loop (for plotting purposes).
+    :param op: `AdaptOptions` parameter class.
+    :return: Thetis `FlowSolver2d` object containing solution fields; error indicator; objective functional, as computed on `mesh2d`.
     """
     # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7
     # digits) in roughly 800 timesteps of 20s with SteadyState we only do 1 timestep (t_end should
@@ -341,7 +345,7 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
     """
     Adapt mesh based on an error indicator or field of interest.
 
-    :arg solver_obj: Thetis FlowSolver2d object.
+    :arg solver_obj: Thetis `FlowSolver2d` object.
     :param error_indicator: optional error indicator upon which to adapt.
     :param metric: If a metric field is provided, it will be intersected.
     :param op: `AdaptOptions` parameter class.
@@ -372,7 +376,7 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
         elif op.adapt_field != 'fluid_speed':
             raise ValueError("Field for adaptation {:s} not recognised.".format(op.adapt_field))
 
-    elif op.approach in ('DWP', 'DWR'):
+    elif op.approach in ('DWP', 'DWR', 'Vorticity'):
         assert(error_indicator is not None)
         M = isotropic_metric(error_indicator, op=op)
 
@@ -391,6 +395,17 @@ def mesh_adapt(solver_obj, error_indicator=None, metric=None, op=TurbineOptions(
     print("Number of elements after mesh adaptation: {:d}".format(mesh2d.num_cells()))
 
     return mesh2d, M
+
+
+def vorticity_indicator(solver_obj, op=TurbineOptions()):
+    """
+    Compute P1 indicator for the vorticity of the fluid velocity field by projection.
+    :arg solver_obj: Thetis `FlowSolver2d` object.
+    :param op: `AdaptOptions` parameter class.
+    """
+    P1 = FunctionSpace(solver_obj.mesh2d, "CG", 1)
+    omega = project(curl(solver_obj.fields.uv_2d), P1)
+    return normalise_indicator(omega, op=op)
 
 
 if __name__ == "__main__":
@@ -467,6 +482,7 @@ if __name__ == "__main__":
         f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))
 
     M = None
+    epsilon = None
     tic = clock()
     if op.approach == "FixedMesh":
         with pyadjoint.stop_annotating():
@@ -477,7 +493,7 @@ if __name__ == "__main__":
         get_error_estimators(mesh2d, op=op)
     else:
         File(op.directory() + 'Mesh0.pvd').write(mesh2d.coordinates)
-        if op.approach == "HessianBased":
+        if op.approach in ("HessianBased", "Vorticity"):
             with pyadjoint.stop_annotating():
                 for i in range(op.num_adapt):
                     print("Generating solution on mesh {:d}".format(i))
@@ -487,7 +503,9 @@ if __name__ == "__main__":
                     adapt_time = clock()
                     if M is not None:
                         M = interp(mesh2d, M)
-                    mesh2d, M = mesh_adapt(solver_obj, metric=M, op=op)
+                    if op.approach == "Vorticity":
+                        epsilon = vorticity_indicator(solver_obj, op=op)
+                    mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
                     adapt_time = clock() - adapt_time
                     f.write('MESH {:d}\n'.format(i+1))
                     f.write('mesh elements: {:d}\n'.format(mesh2d.num_cells()))

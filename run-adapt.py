@@ -67,6 +67,8 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
     options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
+    options.use_lax_friedrichs_velocity = False  # TODO
+    options.use_grad_depth_viscosity_term = False
 
     # assign boundary conditions
     left_tag = 1
@@ -118,7 +120,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     return solver_obj, J
 
 
-def get_error_estimators(mesh2d, op=TurbineOptions()):
+def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
     """
     Generate a posteriori error indicators on mesh `mesh2d` using `AdaptOptions` parameter class `op`.
 
@@ -166,6 +168,8 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
     options.quadratic_drag_coefficient = Constant(op.drag_coefficient)
+    options.use_lax_friedrichs_velocity = False  # TODO
+    options.use_grad_depth_viscosity_term = False
 
     # assign boundary conditions
     left_tag = 1
@@ -297,11 +301,13 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             # [Ainsworth & Oden 1997] 'explicit' estimator
             if op.dwr_approach == 'AO97':
                 epsilon.project(assemble(i * (h * h * cell_res * cell_res + h * edge_res * edge_res) * dx))
+                #epsilon.project(h * h * cell_res * cell_res + h * edge_res * edge_res)
             else:
 
             # Adaptive strategies, as in [Rognes & Logg, 2010]
                 if op.dwr_approach == 'error_representation':
                     epsilon.project(cell_res + edge_res)
+                    # epsilon.project(cell_res + 0.01 * edge_res)
                 elif op.dwr_approach == 'dwr':
                     # v = TestFunction(P1)
                     # flux_terms = jump(edge_res)*v*dS
@@ -325,10 +331,7 @@ def get_error_estimators(mesh2d, op=TurbineOptions()):
             print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
-        if op.approach == 'DWR':
-            File(op.directory() + op.dwr_approach + "indicator.pvd").write(epsilon, cell_res, edge_res)  # TODO: all steps
-        else:
-            File(op.directory() + "ErrorIndicator2d.pvd").write(epsilon)  # TODO: all steps
+        op.error_file.write(epsilon, cell_res, edge_res, time=float(iteration))
         tape.clear_tape()
 
     return solver_obj, epsilon, J
@@ -410,13 +413,13 @@ if __name__ == "__main__":
     parser.add_argument("-thrust_coefficient", help="Set thrust coefficient C_T (default 0.8)")
     parser.add_argument("-viscosity", help="Set fluid viscosity (default 1.)")
     parser.add_argument("-uniform_mesh", help="Start with a uniform mesh")
+    parser.add_argument("-uniform_mesh_resolution")
+    parser.add_argument("-rescaling")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
     parser.add_argument("-m", help="Toggle additional message for output file")
     args = parser.parse_args()
 
-    op = TurbineOptions()
-    if args.approach is not None:
-        op.approach = args.approach
+    op = TurbineOptions(args.approach if args.approach is not None else 'FixedMesh')
     if args.field is not None:
         op.adapt_field = args.field
     if args.gradate is not None:
@@ -438,10 +441,15 @@ if __name__ == "__main__":
     uniform = False
     if args.uniform_mesh is not None:
         uniform = bool(args.uniform_mesh)
+        if args.uniform_mesh_resolution is not None:
+            uniform_res = float(args.uniform_mesh_resolution)
+        else:
+            uniform_res = 1.
+    if args.rescaling is not None:
+        op.rescaling = float(args.rescaling)
 
     if uniform:
-        #mesh2d = RectangleMesh(100, 20, L, W)
-        mesh2d = RectangleMesh(500, 100, L, W)
+        mesh2d = RectangleMesh(int(uniform_res*100), int(uniform_res*20), L, W)
     else:
         mesh2d = Mesh('channel.msh')
     op.target_vertices = mesh2d.num_vertices() * op.rescaling  # NOTE: This is not done each step
@@ -464,6 +472,7 @@ if __name__ == "__main__":
         with pyadjoint.stop_annotating():
             J = solve_turbine(mesh2d, op=op)[1]
             f.write('objective val: {:.4e}\n'.format(J))
+            print('objective val: {:.4e}'.format(J))
     elif op.approach == 'AdjointOnly':
         get_error_estimators(mesh2d, op=op)
     else:
@@ -487,6 +496,7 @@ if __name__ == "__main__":
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
                     f.write('adapt time:    {:.3f}\n'.format(adapt_time))
                     f.write('objective val: {:.4e}\n\n'.format(J))
+                    print('objective val: {:.4e}'.format(J))
                     meshfile = op.directory() + op.adapt_field + '_mesh' + str(i+1) + '.pvd'
                     File(meshfile).write(mesh2d.coordinates)
                     if not op.intersect:
@@ -496,7 +506,7 @@ if __name__ == "__main__":
             for i in range(op.num_adapt):
                 print("Generating solution on mesh {:d}".format(i))
                 solve_time = clock()
-                solver_obj, epsilon, J = get_error_estimators(mesh2d, op=op)
+                solver_obj, epsilon, J = get_error_estimators(mesh2d, iteration=i, op=op)
                 solve_time = clock() - solve_time
                 adapt_time = clock()
                 if M is not None:
@@ -512,6 +522,7 @@ if __name__ == "__main__":
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
                 f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
                 f.write('objective val: {:.4e}\n\n'.format(J))
+                print('objective val: {:.4e}'.format(J))
                 if op.approach == 'DWP':
                     meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
                 else:
@@ -524,7 +535,8 @@ if __name__ == "__main__":
         f.write('SUMMARY\n')
         f.write('total time:   {:.3f}\n'.format(toc-tic))
         f.write('viscosity:    {:.3f}\n'.format(op.viscosity))
-        f.write('drag coeff.:  {:.3f}\n'.format(op.drag_coefficient))
+        f.write('drag coeff.:  {:.4f}\n'.format(op.drag_coefficient))
+        f.write('rescaling.:   {:.3f}\n'.format(op.rescaling))
         if op.approach != 'FixedMesh':
             f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
             f.write('gradation:    {}\n'.format(op.gradate))

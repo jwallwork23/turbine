@@ -335,7 +335,10 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
             print("DWR estimator: {:.4e}".format(norm(epsilon)))
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
-        op.error_file.write(epsilon, cell_res, edge_res, time=float(iteration))
+        if op.approach == 'DWR':
+            op.error_file.write(epsilon, cell_res, edge_res, time=float(iteration))
+        else:
+            op.error_file.write(epsilon, time=float(iteration))
         tape.clear_tape()
 
     return solver_obj, epsilon, J
@@ -479,7 +482,7 @@ if __name__ == "__main__":
         f.write('inner resolution: {:.3f}\n'.format(dx2))
         f.write('mesh elements:    {:d}\n'.format(mesh2d.num_cells()))
         f.write('mesh edges:       {:d}\n'.format(mesh2d.num_edges()))
-        f.write('mesh vertices:    {:d}\n\n'.format(mesh2d.num_vertices()))
+        f.write('mesh vertices:    {:d}\n'.format(mesh2d.num_vertices()))
 
     M = None
     epsilon = None
@@ -488,16 +491,27 @@ if __name__ == "__main__":
         with pyadjoint.stop_annotating():
             J = solve_turbine(mesh2d, op=op)[1]
             f.write('objective val: {:.4e}\n'.format(J))
-            print('objective val: {:.4e}'.format(J))
     elif op.approach == 'AdjointOnly':
         get_error_estimators(mesh2d, op=op)
     else:
-        File(op.directory() + 'Mesh0.pvd').write(mesh2d.coordinates)
-        if op.approach in ("HessianBased", "Vorticity"):
-            with pyadjoint.stop_annotating():
-                for i in range(op.num_adapt):
+
+        # Arbitrary choices to satisfy while condition on first run
+        cells = 1
+        cells_prev = 0
+        J = 1
+        J_prev = 0
+        i = 0  # Mesh iteration index
+
+        while (abs(cells_prev - cells) > op.element_rtol*cells_prev) and \
+              (i < op.num_adapt) and \
+              ((abs(J_prev - J) > op.objective_rtol*J_prev) or (i < 2)):
+
+            File(op.directory() + 'Mesh0.pvd').write(mesh2d.coordinates)
+            if op.approach in ("HessianBased", "Vorticity"):
+                with pyadjoint.stop_annotating():
                     print("Generating solution on mesh {:d}".format(i))
                     solve_time = clock()
+                    J_prev = J
                     solver_obj, J = solve_turbine(mesh2d, op=op)
                     solve_time = clock() - solve_time
                     adapt_time = clock()
@@ -507,21 +521,20 @@ if __name__ == "__main__":
                         epsilon = vorticity_indicator(solver_obj, op=op)
                     mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
                     adapt_time = clock() - adapt_time
+                    f.write('objective val: {:.4e}\n\n'.format(J))
                     f.write('MESH {:d}\n'.format(i+1))
-                    f.write('mesh elements: {:d}\n'.format(mesh2d.num_cells()))
+                    cells_prev = solver_obj.mesh2d.num_cells()
+                    cells = mesh2d.num_cells()
+                    f.write('mesh elements: {:d}\n'.format(cells))
                     f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
                     f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
                     f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                    f.write('objective val: {:.4e}\n\n'.format(J))
-                    print('objective val: {:.4e}'.format(J))
                     meshfile = op.directory() + op.adapt_field + '_mesh' + str(i+1) + '.pvd'
                     File(meshfile).write(mesh2d.coordinates)
                     if not op.intersect:
                         M = None
-        else:
-            # TODO: Stopping criteria: #elements or J converges
-            for i in range(op.num_adapt):
+            else:
                 print("Generating solution on mesh {:d}".format(i))
                 solve_time = clock()
                 solver_obj, epsilon, J = get_error_estimators(mesh2d, iteration=i, op=op)
@@ -532,15 +545,16 @@ if __name__ == "__main__":
                 with pyadjoint.stop_annotating():
                     mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
                 adapt_time = clock() - adapt_time
+                f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
+                f.write('objective val: {:.4e}\n\n'.format(J))
                 f.write('MESH {:d}\n'.format(i+1))
-                f.write('mesh elements: {:d}\n'.format(mesh2d.num_cells()))
+                cells_prev = solver_obj.mesh2d.num_cells()
+                cells = mesh2d.num_cells()
+                f.write('mesh elements: {:d}\n'.format(cells))
                 f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
                 f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                 f.write('solver time:   {:.3f}\n'.format(solve_time))
                 f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
-                f.write('objective val: {:.4e}\n\n'.format(J))
-                print('objective val: {:.4e}'.format(J))
                 if op.approach == 'DWP':
                     meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
                 else:
@@ -548,6 +562,24 @@ if __name__ == "__main__":
                 File(meshfile).write(mesh2d.coordinates)
                 if not op.intersect:
                     M = None
+            i += 1
+
+            if abs(cells_prev - cells) <= op.element_rtol*cells_prev:
+                with pyadjoint.stop_annotating():
+                    J = solve_turbine(mesh2d, op=op)[1]
+                if op.approach in ('DWP', 'DWR'):
+                    f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
+                f.write('objective val: {:.4e}\n\n'.format(J))
+                msg = 'convergence in mesh element count'
+                reason = 'MESH_CONVERGENCE'
+            elif i >= op.num_adapt:
+                msg = 'maximum number of mesh iterations reached'
+                reason = 'MAX_ITERATIONS'
+            elif abs(J_prev - J) <= op.objective_rtol*J_prev:
+                msg = 'convergence in objective value'
+                reason = 'OBJECTIVE_CONVERGENCE'
+        print("Simulation terminated after {:d} iterations due to {:s}.".format(i, msg))
+
     if op.approach != 'AdjointOnly':
         toc = clock()
         f.write('SUMMARY\n')
@@ -556,7 +588,8 @@ if __name__ == "__main__":
         f.write('drag coeff.:  {:.4f}\n'.format(op.drag_coefficient))
         f.write('rescaling.:   {:.3f}\n'.format(op.rescaling))
         if op.approach != 'FixedMesh':
-            f.write('mesh adapts:  {:d}\n'.format(op.num_adapt))
+            f.write('mesh adapts:  {:d}\n'.format(i))
+            f.write('termination:  {:s}\n'.format(reason))
             f.write('gradation:    {}\n'.format(op.gradate))
             f.write('intersect:    {}\n'.format(op.intersect))
             if op.approach == 'HessianBased':

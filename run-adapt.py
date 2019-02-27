@@ -225,7 +225,8 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
     # Plot source term for adjoint equation
     if op.approach == 'AdjointOnly':
         u = solver_obj.fields.uv_2d
-        unormu = project(u*sqrt(inner(u,u)), P1)
+        C_D = C_T*correction*A_T/2.*turbine_density
+        unormu = project(3.*C_D*u*sqrt(inner(u,u)), P1)
         unormu.rename("Source term for adjoint equation")
         File(op.directory() + 'AdjointSource2d.pvd').write(unormu)
 
@@ -264,24 +265,24 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
             bc1 = assemble(inner(i_vec,u-inflow)*ds(1))
             bc2 = assemble(i*eta*ds(2))
             bc3 = assemble(i*dot(u,n)*ds(3))
-            print('bc1: {:.4e} {:.4e}'.format(max(bc1.dat.data[:,0]), max(bc1.dat.data[:,1])))
-            print('bc2: {:.4e}'.format(max(bc2.dat.data)))
-            print('bc3: {:.4e}'.format(max(bc3.dat.data)))
+            print('bc1: {:.4e} {:.4e}'.format(max(abs(bc1.dat.data[:,0])), max(abs(bc1.dat.data[:,1]))))
+            print('bc2: {:.4e}'.format(max(abs(bc2.dat.data))))
+            print('bc3: {:.4e}'.format(max(abs(bc3.dat.data))))
 
             bc0_1 = assemble(inner(i_vec, z) * ds(1))
             bc0_2 = assemble(inner(i_vec, z) * ds(2))
             bc0_3 = assemble(inner(i_vec, z) * ds(3))
-            bc13_expr = zeta*dot(u, n) + g*dot(z, n)
-            bc1 = assemble(i*abs(bc13_expr)*ds(1))
-            bc2_expr = zeta*(H_const + eta)*n + z*dot(u, n) - nu*dot(nabla_grad(z), n)
+            bc1 = assemble(i*(zeta*dot(u, n) + g*dot(z, n))*ds(1))
+            bc2_expr = zeta*(H_const + eta)*n + u*dot(z, n) + nu*dot(nabla_grad(z), n)
             bc2 = assemble(inner(i_vec, bc2_expr)*ds(2))
-            bc3 = assemble(i*abs(bc13_expr)*ds(3))
-            print('bc0_1: {:.4e} {:.4e}'.format(max(bc0_1.dat.data[:,0]), max(bc0_1.dat.data[:,1])))
-            print('bc0_2: {:.4e} {:.4e}'.format(max(bc0_2.dat.data[:,0]), max(bc0_2.dat.data[:,1])))
-            print('bc0_3: {:.4e} {:.4e}'.format(max(bc0_3.dat.data[:,0]), max(bc0_3.dat.data[:,1])))
-            print('bc1: {:.4e}'.format(max(bc1.dat.data)))
-            print('bc2: {:.4e} {:.4e}'.format(max(bc2.dat.data[:,0]), max(bc2.dat.data[:,1])))
-            print('bc3: {:.4e}'.format(max(bc3.dat.data)))
+            bc3 = assemble(i*(zeta*dot(u, n) + g*dot(z, n))*ds(3))
+            #bc3 = assemble(i*(zeta*dot(u, n))*ds(3))  # NOTE this works!
+            print('bc0_1: {:.4e} {:.4e}'.format(max(abs(bc0_1.dat.data[:,0])), max(abs(bc0_1.dat.data[:,1]))))
+            print('bc0_2: {:.4e} {:.4e}'.format(max(abs(bc0_2.dat.data[:,0])), max(abs(bc0_2.dat.data[:,1]))))
+            print('bc0_3: {:.4e} {:.4e}'.format(max(abs(bc0_3.dat.data[:,0])), max(abs(bc0_3.dat.data[:,1]))))
+            print('bc1: {:.4e}'.format(max(abs(bc1.dat.data))))
+            print('bc2: {:.4e} {:.4e}'.format(max(abs(bc2.dat.data[:,0])), max(abs(bc2.dat.data[:,1]))))
+            print('bc3: {:.4e}'.format(max(abs(bc3.dat.data))))
             return
 
         # Form error indicator

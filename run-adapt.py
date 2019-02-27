@@ -501,6 +501,8 @@ if __name__ == "__main__":
         J = 1
         J_prev = 0
         i = 0  # Mesh iteration index
+        solve_time = 0.
+        adapt_time = 0.
 
         while (abs(cells_prev - cells) > op.element_rtol*cells_prev) and \
               (i < op.num_adapt) and \
@@ -514,14 +516,44 @@ if __name__ == "__main__":
                     J_prev = J
                     solver_obj, J = solve_turbine(mesh2d, op=op)
                     solve_time = clock() - solve_time
+                    f.write('objective val: {:.4e}\n\n'.format(J))
+                    if abs(J_prev - J) > op.objective_rtol*J_prev:
+                        adapt_time = clock()
+                        if M is not None:
+                            M = interp(mesh2d, M)
+                        if op.approach == "Vorticity":
+                            epsilon = vorticity_indicator(solver_obj, op=op)
+                        mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
+                        adapt_time = clock() - adapt_time
+                        f.write('MESH {:d}\n'.format(i+1))
+                        cells_prev = solver_obj.mesh2d.num_cells()
+                        cells = mesh2d.num_cells()
+                        f.write('mesh elements: {:d}\n'.format(cells))
+                        f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
+                        f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
+                        f.write('solver time:   {:.3f}\n'.format(solve_time))
+                        f.write('adapt time:    {:.3f}\n'.format(adapt_time))
+                        meshfile = op.directory() + op.adapt_field + '_mesh' + str(i+1) + '.pvd'
+                        File(meshfile).write(mesh2d.coordinates)
+                        if not op.intersect:
+                            M = None
+            else:
+                print("Generating solution on mesh {:d}".format(i))
+                solve_time = clock()
+                J_prev = J
+                solver_obj, epsilon, J = get_error_estimators(mesh2d, iteration=i, op=op)
+                solve_time = clock() - solve_time
+                f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
+                f.write('objective val: {:.4e}\n\n'.format(J))
+                print(abs(J_prev-J))
+                print(op.objective_rtol*J_prev)
+                if abs(J_prev - J) > op.objective_rtol*J_prev:
                     adapt_time = clock()
                     if M is not None:
                         M = interp(mesh2d, M)
-                    if op.approach == "Vorticity":
-                        epsilon = vorticity_indicator(solver_obj, op=op)
-                    mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
+                    with pyadjoint.stop_annotating():
+                        mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
                     adapt_time = clock() - adapt_time
-                    f.write('objective val: {:.4e}\n\n'.format(J))
                     f.write('MESH {:d}\n'.format(i+1))
                     cells_prev = solver_obj.mesh2d.num_cells()
                     cells = mesh2d.num_cells()
@@ -530,38 +562,13 @@ if __name__ == "__main__":
                     f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
                     f.write('solver time:   {:.3f}\n'.format(solve_time))
                     f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                    meshfile = op.directory() + op.adapt_field + '_mesh' + str(i+1) + '.pvd'
+                    if op.approach == 'DWP':
+                        meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
+                    else:
+                        meshfile = op.directory() + op.dwr_approach + '_mesh' + str(i+1) + '.pvd'
                     File(meshfile).write(mesh2d.coordinates)
                     if not op.intersect:
                         M = None
-            else:
-                print("Generating solution on mesh {:d}".format(i))
-                solve_time = clock()
-                solver_obj, epsilon, J = get_error_estimators(mesh2d, iteration=i, op=op)
-                solve_time = clock() - solve_time
-                adapt_time = clock()
-                if M is not None:
-                    M = interp(mesh2d, M)
-                with pyadjoint.stop_annotating():
-                    mesh2d, M = mesh_adapt(solver_obj, error_indicator=epsilon, metric=M, op=op)
-                adapt_time = clock() - adapt_time
-                f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
-                f.write('objective val: {:.4e}\n\n'.format(J))
-                f.write('MESH {:d}\n'.format(i+1))
-                cells_prev = solver_obj.mesh2d.num_cells()
-                cells = mesh2d.num_cells()
-                f.write('mesh elements: {:d}\n'.format(cells))
-                f.write('mesh edges:    {:d}\n'.format(mesh2d.num_edges()))
-                f.write('mesh vertices: {:d}\n'.format(mesh2d.num_vertices()))
-                f.write('solver time:   {:.3f}\n'.format(solve_time))
-                f.write('adapt time:    {:.3f}\n'.format(adapt_time))
-                if op.approach == 'DWP':
-                    meshfile = op.directory() + 'Mesh' + str(i+1) + '.pvd'
-                else:
-                    meshfile = op.directory() + op.dwr_approach + '_mesh' + str(i+1) + '.pvd'
-                File(meshfile).write(mesh2d.coordinates)
-                if not op.intersect:
-                    M = None
             i += 1
 
             if abs(cells_prev - cells) <= op.element_rtol*cells_prev:
@@ -572,12 +579,12 @@ if __name__ == "__main__":
                 f.write('objective val: {:.4e}\n\n'.format(J))
                 msg = 'convergence in mesh element count'
                 reason = 'MESH_CONVERGENCE'
-            elif i >= op.num_adapt:
-                msg = 'maximum number of mesh iterations reached'
-                reason = 'MAX_ITERATIONS'
             elif abs(J_prev - J) <= op.objective_rtol*J_prev:
                 msg = 'convergence in objective value'
                 reason = 'OBJECTIVE_CONVERGENCE'
+            elif i >= op.num_adapt:
+                msg = 'maximum number of mesh iterations reached'
+                reason = 'MAX_ITERATIONS'
         print("Simulation terminated after {:d} iterations due to {:s}.".format(i, msg))
 
     if op.approach != 'AdjointOnly':

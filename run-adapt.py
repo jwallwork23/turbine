@@ -98,7 +98,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     #     ), 1.0 / D ** 2, 0))
 
     # Use bump, rather than indicator, function
-    op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]
+    op.region_of_interest = [(xt1, yt1, D/2), (xt2, yt2, D/2)]  # TODO: Alter op for this format
     turbine_density = op.bump(mesh2d, scale=len(op.region_of_interest)/assemble(op.bump(mesh2d)*dx))
     File(op.directory()+'Bump.pvd').write(turbine_density)
 
@@ -313,19 +313,33 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
                 if op.dwr_approach == 'error_representation':
                     epsilon.project(cell_res + edge_res)
                     # epsilon.project(cell_res + 0.01 * edge_res)
+                elif op.dwr_approach == 'cell_only':
+                    epsilon.project(cell_res)
+                elif op.dwr_approach == 'edge_only':
+                    epsilon.project(edge_res)
                 elif op.dwr_approach == 'dwr':
-                    # v = TestFunction(P1)
-                    # flux_terms = jump(edge_res)*v*dS
-                    # r = TrialFunction(P1)
-                    # mass_term = r*v*dx
-                    # r = Function(P1)
-                    # solve(mass_term == flux_terms, r)
-                    # epsilon.project(cell_res)
-                    # epsilon.dat.data[:] += r.dat.data
-                    edge_res.project(jump(edge_res))  # FIXME
+                    r = TrialFunction(P0)
+                    mass_term = r('+')*i('+')*dS
+                    flux_term = jump(edge_res)*i('-')*dS
+                    r1 = Function(P0)
+                    solve(mass_term == flux_term, r1, solver_parameters={'pc_type': 'svd'})
+                    mass_term = r('-')*i('-')*dS
+                    flux_term = jump(edge_res)*i('+')*dS
+                    r2 = Function(P0)
+                    solve(mass_term == flux_term, r2, solver_parameters={'pc_type': 'svd'})
+                    edge_res.project(r1+r2)  # TODO: Use something (much) more efficient
                     epsilon.project(cell_res + edge_res)
                 elif op.dwr_approach == 'cell_facet_split':
-                    edge_res.project(abs(jump(edge_res)))  # FIXME
+                    r = TrialFunction(P0)
+                    mass_term = r('+')*i('+')*dS
+                    flux_term = jump(edge_res)*i('-')*dS
+                    r1 = Function(P0)
+                    solve(mass_term == flux_term, r1, solver_parameters={'pc_type': 'svd'})
+                    mass_term = r('-')*i('-')*dS
+                    flux_term = jump(edge_res)*i('+')*dS
+                    r2 = Function(P0)
+                    solve(mass_term == flux_term, r2, solver_parameters={'pc_type': 'svd'})
+                    edge_res.project(abs(r1)+abs(r2))  # TODO: Use something (much) more efficient
                     epsilon.project(cell_res + edge_res)
                 else:
                     raise ValueError("DWR approach {:s} not recognised.".format(op.dwr_approach))
@@ -546,8 +560,6 @@ if __name__ == "__main__":
                 solve_time = clock() - solve_time
                 f.write('indicator:     {:.4e}\n'.format(norm(epsilon)))
                 f.write('objective val: {:.4e}\n\n'.format(J))
-                print(abs(J_prev-J))
-                print(op.objective_rtol*J_prev)
                 if abs(J_prev - J) > op.objective_rtol*J_prev:
                     adapt_time = clock()
                     if M is not None:

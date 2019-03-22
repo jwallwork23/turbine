@@ -63,7 +63,7 @@ def solve_turbine(mesh2d, op=TurbineOptions()):
     options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
-    options.timestepper_options.solver_parameters['snes_monitor'] = True
+    options.timestepper_options.solver_parameters['snes_monitor'] = None
     print("Using solver parameters {:s}".format(str(options.timestepper_options.solver_parameters)))
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
@@ -269,14 +269,14 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
             print('bc2: {:.4e}'.format(max(abs(bc2.dat.data))))
             print('bc3: {:.4e}'.format(max(abs(bc3.dat.data))))
 
-            bc0_1 = assemble(inner(i_vec, z) * ds(1))
-            bc0_2 = assemble(inner(i_vec, z) * ds(2))
-            bc0_3 = assemble(inner(i_vec, z) * ds(3))
+            bc0_expr = nu*z
+            bc0_1 = assemble(inner(i_vec, bc0_expr) * ds(1))
+            bc0_2 = assemble(inner(i_vec, bc0_expr) * ds(2))
+            bc0_3 = assemble(inner(i_vec, bc0_expr) * ds(3))
             bc1 = assemble(i*(zeta*dot(u, n) + g*dot(z, n))*ds(1))
             bc2_expr = zeta*(H_const + eta)*n + u*dot(z, n) + nu*dot(nabla_grad(z), n)
             bc2 = assemble(inner(i_vec, bc2_expr)*ds(2))
             bc3 = assemble(i*(zeta*dot(u, n) + g*dot(z, n))*ds(3))
-            #bc3 = assemble(i*(zeta*dot(u, n))*ds(3))  # NOTE this works!
             print('bc0_1: {:.4e} {:.4e}'.format(max(abs(bc0_1.dat.data[:,0])), max(abs(bc0_1.dat.data[:,1]))))
             print('bc0_2: {:.4e} {:.4e}'.format(max(abs(bc0_2.dat.data[:,0])), max(abs(bc0_2.dat.data[:,1]))))
             print('bc0_3: {:.4e} {:.4e}'.format(max(abs(bc0_3.dat.data[:,0])), max(abs(bc0_3.dat.data[:,1]))))

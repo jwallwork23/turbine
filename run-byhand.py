@@ -1,6 +1,6 @@
 from firedrake import *
 import math
-op2.init(log_level=INFO)
+#op2.init(log_level=INFO)
 
 from adapt.adaptivity import *
 from adapt.interpolation import interp
@@ -44,6 +44,13 @@ class TurbineProblem():
         # Taylor-Hood space
         self.V = VectorFunctionSpace(self.mesh, "CG", 2) * FunctionSpace(self.mesh, "CG", 1)
         self.sol = Function(self.V)
+        u, eta = self.sol.split()
+        u.rename('Velocity')
+        eta.rename('Elevation')
+        self.sol_adjoint = Function(self.V)
+        z, zeta = self.sol_adjoint.split()
+        z.rename('Adjoint velocity')
+        zeta.rename('Adjoint elevation')
         self.n = FacetNormal(self.mesh)
 
         # solver parameters
@@ -61,15 +68,14 @@ class TurbineProblem():
 
         # plotting
         self.outfile = File('outputs/' + op.approach + '/sol.pvd')
+        self.outfile_adjoint = File('outputs/' + op.approach + '/sol_adjoint.pvd')
 
     def solve_onestep(self):
         g = self.g
         nu = self.nu
         n = self.n
-
-        # function spaces etc
         u, eta = split(self.sol)
-        z, zeta = TestFunctions(self.V)
+        psi, phi = TestFunctions(self.V)
         H = eta + self.b
         if norm(self.sol) < 1e-8:
             u_old = interpolate(as_vector((3., 0.)), self.V.sub(0))
@@ -78,17 +84,17 @@ class TurbineProblem():
 
         F = 0
         # advection term
-        F += inner(z, dot(u_old, nabla_grad(u)))*dx  # note use of u_old
+        F += inner(psi, dot(u_old, nabla_grad(u)))*dx  # note use of u_old
         # pressure gradient term
-        F += g*dot(z, grad(eta))*dx
+        F += g*dot(psi, grad(eta))*dx
         # viscosity term
-        F += -nu*inner(z, dot(n, nabla_grad(u)))*ds
-        F += nu*inner(grad(z), grad(u))*dx
+        F += -nu*inner(psi, dot(n, nabla_grad(u)))*ds
+        F += nu*inner(grad(psi), grad(u))*dx
         # drag term
-        F += (self.C_D+self.C_b)*sqrt(dot(u_old, u_old))*dot(z, u)/H*dx  # note use of u_old
+        F += (self.C_D+self.C_b)*sqrt(dot(u_old, u_old))*dot(psi, u)/H*dx  # note use of u_old
         # hudiv term (in.c Neumann condition)
-        F += zeta*H*dot(u, n)*ds(1) + zeta*H*dot(u, n)*ds(2)
-        F += -H*dot(u, grad(zeta))*dx
+        F += phi*H*dot(u, n)*ds(1) + phi*H*dot(u, n)*ds(2)
+        F += -H*dot(u, grad(phi))*dx
 
         # Dirichlet boundary conditions
         inflow = Constant((3., 0.))
@@ -99,11 +105,9 @@ class TurbineProblem():
         prob = NonlinearVariationalProblem(F, self.sol, bcs=[bc1, bc2])
         solv = NonlinearVariationalSolver(prob, solver_parameters=self.params)
         solv.solve()
-        u, eta = self.sol.split()
-        u.rename('Velocity')
-        eta.rename('Elevation')
 
         # plot
+        u, eta = self.sol.split()
         self.outfile.write(u, eta)
 
     def solve(self):
@@ -111,6 +115,58 @@ class TurbineProblem():
         self.solve_onestep()
         print('Solving with previously established velocity')
         self.solve_onestep()
+
+    def solve_adjoint(self):
+        g = self.g
+        nu = self.nu
+        n = self.n
+        u, eta = split(self.sol)
+        z, zeta = TrialFunctions(self.V)
+        psi, phi = TestFunctions(self.V)
+        H = eta + self.b
+        C = self.C_D + self.C_b
+        unorm = sqrt(inner(u, u))
+
+        a = 0
+        # LHS contributions from adjoint momentum equation  # TODO: check formulation
+        a += inner(dot(transpose(grad(u)), z), psi)*dx
+        a += -div(u)*inner(z, psi)*dx
+        a += inner(z, grad(dot(u, psi)))*dx
+        a += nu*inner(grad(z), grad(psi))*dx
+        a += zeta*div(H*psi)*dx
+        a += C*(unorm*inner(z, psi) + inner(u, z)*inner(u, psi)/unorm)*dx
+        a += -inner(u, psi)*dot(z, n)*ds(1)
+        a += -inner(u, psi)*dot(z, n)*ds(3)
+        a += -zeta*H*dot(psi, n)*ds(1)
+        a += -zeta*H*dot(psi, n)*ds(3)
+        a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(1)
+        a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(3)
+
+        # LHS contributions from adjoint continuity equation  # TODO: check formulation
+        a += g*inner(z, grad(phi))*dx
+        a += zeta*div(phi*u)*dx
+        a += C/(H*H)*unorm*inner(u, z)*phi*dx
+        a += -g*phi*dot(z, n)*ds(2)     # FIXME: Not sure here 
+        #a += -zeta*phi*dot(u, n)*ds(1)  # FIXME: Not sure here
+        a += -zeta*phi*dot(u, n)*ds(2)
+
+        # RHS
+        L = 3.*self.C_D*unorm*inner(u, psi)*dx
+
+        # solve
+        params = {
+                  'mat_type': 'aij',
+                  'pc_type': 'lu',
+                  'ksp_monitor': None,
+                  #'ksp_converged_reason': None,
+                 }
+        #bc = None
+        bc = DirichletBC(self.V.sub(0), 0, 'on_boundary')  # FIXME: not apparent in discrete adjoint
+        solve(a == L, self.sol_adjoint, bcs=bc, solver_parameters=params)
+
+        # plot
+        z, zeta = self.sol_adjoint.split()
+        self.outfile_adjoint.write(z, zeta)
 
     def objective_functional(self):
         u = self.sol.split()[0]
@@ -125,3 +181,4 @@ if __name__ == "__main__":
     tp = TurbineProblem()
     tp.solve()
     J = tp.objective_functional()
+    tp.solve_adjoint()

@@ -2,8 +2,8 @@ from firedrake import *
 import math
 #op2.init(log_level=INFO)
 
-from adapt.adaptivity import *
-from adapt.interpolation import interp
+from adapt.metric import *
+#from adapt.interpolation import interp
 from turbine.options import TurbineOptions
 
 
@@ -24,8 +24,11 @@ A_T = math.pi*(D/2)**2
 
 class TurbineProblem():
 
-    def __init__(self, mesh=None, op=TurbineOptions()):
+    def __init__(self, mesh=None, approach='FixedMesh', op=TurbineOptions()):
         self.mesh = Mesh('channel.msh') if mesh is None else mesh
+        self.P1 = FunctionSpace(self.mesh, "CG", 1)
+        self.P0 = FunctionSpace(self.mesh, "DG", 0)
+        self.approach = approach
         self.op = op
 
         # physical parameters
@@ -66,9 +69,11 @@ class TurbineProblem():
                        #'ksp_converged_reason': None,
                       }
 
-        # plotting
-        self.outfile = File('outputs/' + op.approach + '/sol.pvd')
-        self.outfile_adjoint = File('outputs/' + op.approach + '/sol_adjoint.pvd')
+        # plotting  # FIXME: consistency
+        self.di = self.op.directory()
+        self.outfile = File(self.di + 'sol.pvd')
+        self.outfile_adjoint = File(self.di + 'sol_adjoint.pvd')
+        self.outfile_indicator = File(self.di + 'indicator.pvd')
 
     def solve_onestep(self):
         g = self.g
@@ -187,10 +192,127 @@ class TurbineProblem():
         print("Objective functional: {:.4e}".format(self.J))
         return self.J
 
+    def get_hessian_metric(self):
+        u, eta = self.sol.split()
+        if self.op.adapt_field in ('fluid_speed', 'both'):
+            spd = interpolate(sqrt(inner(u, u)), self.P1)
+            self.M = steady_metric(spd, op=self.op)
+        if self.op.adapt_field == 'elevation':
+            self.M = steady_metric(eta, op=self.op)
+        elif self.op.adapt_field == 'both':
+            self.M = metric_intersection(self.M, steady_metric(eta, op=self.op))
+
+    def get_hessian_metric_adjoint(self):
+        z, zeta = self.sol_adjoint.split()
+        if self.op.adapt_field in ('fluid_speed', 'both'):
+            spd = interpolate(sqrt(inner(z, z)), self.P1)
+            self.M = steady_metric(spd, op=self.op)
+        if self.op.adapt_field == 'elevation':
+            self.M = steady_metric(zeta, op=self.op)
+        elif self.op.adapt_field == 'both':
+            self.M = metric_intersection(self.M, steady_metric(zeta, op=self.op))
+
+    def get_hessian_metric_superposed(self):
+        self.get_hessian_metric()
+        M = self.M.copy()
+        self.get_hessian_metric_adjoint()
+        self.M = metric_intersection(M, self.M)
+
+    def explicit_estimation(self):
+        raise NotImplementedError
+
+    def dwp_indication(self):
+        self.indicator = project(inner(self.sol, self.sol_adjoint), self.P1)
+
+    def difference_quotient_estimation(self):
+        raise NotImplementedError
+ 
+    def dwr_estimation(self):
+        raise NotImplementedError
+
+    def dwr_estimation_adjoint(self):
+        raise NotImplementedError
+
+    def get_isotropic_metric(self):
+        name = self.indicator.name()
+        self.indicator = project(self.indicator, self.P1)
+        self.indicator = normalise_indicator(self.indicator, op=self.op)
+        self.indicator.rename(name + '_indicator')
+        self.outfile_indicator.write(self.indicator)
+        self.M = isotropic_metric(self.indicator, op=self.op)
+
+    def adapt_mesh(self, relaxation_parameter=0.9, prev_metric=None, plot_mesh=True):
+        
+        # Estimate error and generate associated metric
+        if self.approach == 'hessian':
+            self.get_hessian_metric()
+        elif self.approach == 'hessian_adjoint':
+            self.get_hessian_metric_adjoint()
+        elif self.approach == 'hessian_superposed':
+            self.get_hessian_metric_superposed()
+        elif self.approach == 'explicit':
+            self.explicit_estimation()
+            self.get_isotropic_metric()
+        elif self.approach == 'dwp':
+            self.dwp_indication()
+            self.get_isotropic_metric()
+        elif self.approach == 'dwr':
+            self.dwr_estimation()
+            self.get_isotropic_metric()
+        elif self.approach == 'dwr_adjoint':
+            self.dwr_estimation_adjoint()
+            self.get_isotropic_metric()
+        elif self.approach == 'dwr_both':
+            self.dwr_estimation()
+            self.get_isotropic_metric()
+            i = self.indicator.copy()
+            self.dwr_estimation_adjoint()
+            self.indicator.interpolate(Constant(0.5)*(i+self.indicator))
+            self.get_isotropic_metric()
+        elif self.approach == 'dwr_averaged':
+            self.dwr_estimation()
+            self.get_isotropic_metric()
+            i = self.indicator.copy()
+            self.dwr_estimation_adjoint()
+            self.indicator.interpolate(Constant(0.5)*(abs(i)+abs(self.indicator)))
+            self.get_isotropic_metric()
+        elif self.approach == 'dwr_relaxed':
+            self.dwr_estimation()
+            self.get_isotropic_metric()
+            M = self.M.copy()
+            self.dwr_estimation_adjoint()
+            self.get_isotropic_metric()
+            self.M = metric_relaxation(M, self.M)
+        elif self.approach == 'dwr_superposed':
+            self.dwr_estimation()
+            self.get_isotropic_metric()
+            M = self.M.copy()
+            self.dwr_estimation_adjoint()
+            self.get_isotropic_metric()
+            self.M = metric_intersection(M, self.M)
+        else:
+            raise ValueError("Adaptivity mode {:s} not regcognised.".format(self.approach))
+
+        # Apply metric relaxation, if requested
+        self.M_unrelaxed = self.M.copy()
+        if prev_metric is not None:
+            self.M.project(metric_relaxation(interp(self.mesh, prev_metric), self.M, relaxation_parameter))
+        # (Default relaxation of 0.9 following [Power et al 2006])
+            
+        # Adapt mesh
+        self.mesh = AnisotropicAdaptation(self.mesh, self.M).adapted_mesh
+        if plot_mesh:
+            File(self.di + 'Mesh.pvd').write(self.mesh.coordinates)     
+
 
 if __name__ == "__main__":
 
-    tp = TurbineProblem()
+    op = TurbineOptions()
+    op.adapt_field = 'both'
+
+    approach = 'hessian_superposed'
+    tp = TurbineProblem(approach=approach, op=op)
     tp.solve()
     J = tp.objective_functional()
     tp.solve_adjoint()
+    tp.adapt_mesh()

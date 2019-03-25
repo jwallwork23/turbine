@@ -6,7 +6,7 @@ import pyadjoint
 import math
 # op2.init(log_level=INFO)
 
-from adapt.adaptivity import *
+from adapt.metric import *
 from adapt.interpolation import interp
 from turbine.options import TurbineOptions
 
@@ -167,7 +167,7 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
     options.element_family = op.family
     options.timestepper_type = 'SteadyState'
     options.timestepper_options.solver_parameters['pc_factor_mat_solver_type'] = 'mumps'
-    options.timestepper_options.solver_parameters['snes_monitor'] = True
+    options.timestepper_options.solver_parameters['snes_monitor'] = None
     print("Using solver parameters {:s}".format(str(options.timestepper_options.solver_parameters)))
     #options.timestepper_options.implicitness_theta = 1.0
     options.horizontal_viscosity = Constant(op.viscosity)
@@ -351,9 +351,9 @@ def get_error_estimators(mesh2d, iteration=0, op=TurbineOptions()):
         epsilon = normalise_indicator(epsilon, op=op)
         epsilon.rename('error_2d')
         if op.approach == 'DWR':
-            op.error_file.write(epsilon, cell_res, edge_res, time=float(iteration))
+            op.estimator_outfile.write(epsilon, cell_res, edge_res, time=float(iteration))
         else:
-            op.error_file.write(epsilon, time=float(iteration))
+            op.estimator_outfile.write(epsilon, time=float(iteration))
         tape.clear_tape()
 
     return solver_obj, epsilon, J

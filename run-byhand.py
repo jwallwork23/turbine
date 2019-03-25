@@ -202,6 +202,9 @@ class TurbineProblem():
         if self.op.adapt_field in ('fluid_speed', 'both'):
             spd = interpolate(sqrt(inner(u, u)), self.P1)
             self.M = steady_metric(spd, op=self.op)
+        if self.op.adapt_field == 'fluid_speed_cubed':
+            spd = interpolate(sqrt(inner(u, u))**3, self.P1)
+            self.M = steady_metric(spd, op=self.op)
         if self.op.adapt_field == 'elevation':
             self.M = steady_metric(eta, op=self.op)
         elif self.op.adapt_field == 'both':
@@ -308,6 +311,9 @@ class TurbineProblem():
         if self.op.adapt_field in ('fluid_speed', 'both'):
             spd = interpolate(sqrt(inner(u, u)), self.P1)
             self.M = construct_hessian(spd, op=self.op)
+        if self.op.adapt_field == 'fluid_speed_cubed':
+            spd = interpolate(sqrt(inner(u, u))**3, self.P1)
+            self.M = steady_metric(spd, op=self.op)
         if self.op.adapt_field == 'elevation':
             self.M = construct_hessian(eta, op=self.op)
         elif self.op.adapt_field == 'both':
@@ -336,6 +342,13 @@ class TurbineProblem():
         elif self.op.approach == 'explicit_adjoint':
             self.explicit_estimation_adjoint()
             self.get_isotropic_metric()
+        elif self.op.approach == 'explicit_superposed':
+            self.explicit_estimation()
+            self.get_isotropic_metric()
+            M = self.M.copy()
+            self.explicit_estimation_adjoint()
+            self.get_isotropic_metric()
+            self.M = metric_intersection(M, self.M)
         elif self.op.approach == 'explicit_hessian':
             self.explicit_estimation()
             self.get_anisotropic_metric(adjoint=True)
@@ -404,11 +417,16 @@ class TurbineProblem():
 if __name__ == "__main__":
 
     import argparse
+    import datetime
+
+    now = datetime.datetime.now()
+    date = str(now.day) + '-' + str(now.month) + '-' + str(now.year % 2000)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh'). Option 'AdjointOnly' allows to just look at adjoint solution.")
     parser.add_argument("-field", help="Choose field to adapt to from {'fluid_speed', 'elevation', 'both'}, denoting speed, free surface and both, resp.")
     parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
+    parser.add_argument("-m", help="Message for output file")
     args = parser.parse_args()
 
     op = TurbineOptions()
@@ -420,21 +438,34 @@ if __name__ == "__main__":
     if args.n is not None:
         op.num_adapt = int(args.n)
 
-    prev_sol = None
-    tp = TurbineProblem(op=op)
+    # TODO: stopping criteria
+    prev_sol = None  
+    mesh = RectangleMesh(100, 20, L, W) if op.approach == 'fixed_mesh' else Mesh('channel.msh')
+    tp = TurbineProblem(mesh=mesh, op=op)
     logfile = open(tp.di + 'log', 'a+')
+    logfile.write(date + '{:s}\n\n'.format(' ' + args.m if args.m is not None else ''))
     logfile.write('Mesh  0: elements = {:10d}\n'.format(tp.mesh.num_cells()))
     for i in range(op.num_adapt):
+        print('Solving on mesh {:d}'.format(i))
         tp.solve(prev_sol=prev_sol)
         J = tp.objective_functional()
         logfile.write('Mesh {:2d}:        J = {:.4e}\n'.format(i, J))
-        tp.solve_adjoint()
-        tp.adapt_mesh()
-        logfile.write('Mesh {:2d}: elements = {:10d}\n'.format(i+1, tp.mesh.num_cells()))
+        if op.approach != 'fixed_mesh':
+            tp.solve_adjoint()
+            tp.adapt_mesh()
+        else:
+            tp.mesh = RectangleMesh((i+2)*100, (i+2)*20, L, W)
         prev_sol = tp.sol
         tp = TurbineProblem(mesh=tp.mesh, op=op)
+        logfile.write('Mesh {:2d}: elements = {:10d}\n'.format(i+1, tp.mesh.num_cells()))
         prev_sol = mixed_pair_interp(tp.V, prev_sol)
         J = tp.objective_functional(sol=prev_sol)
         logfile.write('Mesh {:2d}: J_interp = {:.4e}\n'.format(i+1, J))
     logfile.write('\n\n')
+    logfile.close()
+
+    # print logfile to screen
+    logfile = open(tp.di + 'log', 'r')
+    for line in logfile:
+        print(line.split('\n')[0])
     logfile.close()

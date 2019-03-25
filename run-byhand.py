@@ -189,11 +189,12 @@ class TurbineProblem():
         z, zeta = self.sol_adjoint.split()
         self.outfile_adjoint.write(z, zeta)
 
-    def objective_functional(self):
-        u = self.sol.split()[0]
+    def objective_functional(self, sol=None):
+        u = self.sol.split()[0] if sol is None else sol.split()[0]
         unorm = sqrt(inner(u, u))
         self.J = assemble(self.C_D*(unorm**3)*dx)
-        print("Objective functional: {:.4e}".format(self.J))
+        msg = 'O' if sol is None else 'Interpolated o'
+        print("{:s}bjective functional: {:.4e}".format(msg, self.J))
         return self.J
 
     def get_hessian_metric(self, adjoint=False):
@@ -419,16 +420,21 @@ if __name__ == "__main__":
     if args.n is not None:
         op.num_adapt = int(args.n)
 
-    mesh = None
     prev_sol = None
-    tp = TurbineProblem(mesh=mesh, op=op)
+    tp = TurbineProblem(op=op)
+    logfile = open(tp.di + 'log', 'a+')
+    logfile.write('Mesh  0: elements = {:10d}\n'.format(tp.mesh.num_cells()))
     for i in range(op.num_adapt):
         tp.solve(prev_sol=prev_sol)
         J = tp.objective_functional()
+        logfile.write('Mesh {:2d}:        J = {:.4e}\n'.format(i, J))
         tp.solve_adjoint()
         tp.adapt_mesh()
-        if i < op.num_adapt-1:
-            mesh = tp.mesh
-            prev_sol = tp.sol
-            tp = TurbineProblem(mesh=mesh, op=op)
-            prev_sol = mixed_pair_interp(mesh, tp.V, prev_sol)
+        logfile.write('Mesh {:2d}: elements = {:10d}\n'.format(i+1, tp.mesh.num_cells()))
+        prev_sol = tp.sol
+        tp = TurbineProblem(mesh=tp.mesh, op=op)
+        prev_sol = mixed_pair_interp(tp.V, prev_sol)
+        J = tp.objective_functional(sol=prev_sol)
+        logfile.write('Mesh {:2d}: J_interp = {:.4e}\n'.format(i+1, J))
+    logfile.write('\n\n')
+    logfile.close()

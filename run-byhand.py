@@ -128,30 +128,42 @@ class TurbineProblem():
         unorm = sqrt(inner(u, u))
 
         a = 0
-        # LHS contributions from adjoint momentum equation  # TODO: check formulation
+        # LHS contributions from adjoint momentum equation
         a += inner(dot(transpose(grad(u)), z), psi)*dx
-        a += -div(u)*inner(z, psi)*dx
-        a += inner(z, grad(dot(u, psi)))*dx
+        a += -inner(div(u)*z, psi)*dx
+        a += -inner(dot(u, nabla_grad(z)), psi)*dx
+        #a += inner(z, grad(dot(u, psi)))*dx
+        #a += -inner(div(nu*grad(z)), psi)*dx
         a += nu*inner(grad(z), grad(psi))*dx
-        a += zeta*div(H*psi)*dx
-        a += C*(unorm*inner(z, psi) + inner(u, z)*inner(u, psi)/unorm)*dx
-        a += -inner(u, psi)*dot(z, n)*ds(1)
-        a += -inner(u, psi)*dot(z, n)*ds(3)
-        a += -zeta*H*dot(psi, n)*ds(1)
-        a += -zeta*H*dot(psi, n)*ds(3)
-        a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(1)
-        a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(3)
+        a += -inner(H*grad(zeta), psi)*dx
+        #a += zeta*div(H*psi)*dx
+        a += C*(unorm*inner(z, psi) + inner(u, z)*inner(u, psi)/unorm)/H*dx
 
-        # LHS contributions from adjoint continuity equation  # TODO: check formulation
-        a += g*inner(z, grad(phi))*dx
-        a += zeta*div(phi*u)*dx
-        a += C/(H*H)*unorm*inner(u, z)*phi*dx
-        a += -g*phi*dot(z, n)*ds(2)     # FIXME: Not sure here 
-        #a += -zeta*phi*dot(u, n)*ds(1)  # FIXME: Not sure here
-        a += -zeta*phi*dot(u, n)*ds(2)
+        # LHS contributions from adjoint continuity equation
+        a += g*div(z)*phi*dx
+        #a += -g*inner(z, grad(phi))*dx
+        #a += inner(u, grad(zeta))*phi*dx
+        a += -zeta*div(phi*u)*dx
+        a += C*unorm*inner(u, z)*phi/(H*H)*dx  # TODO: sign?
 
         # RHS
         L = 3.*self.C_D*unorm*inner(u, psi)*dx
+
+        # boundary conditions  # FIXME: currently using heuristics
+        #a += -inner(u*dot(z, n), psi)*ds(1)
+        #a += -inner(u*dot(z, n), psi)*ds(3)
+        #a += -dot(n*zeta*H, psi)*ds(1)
+        #a += -dot(n*zeta*H, psi)*ds(3)
+        a += -inner(nu*dot(n, nabla_grad(z)), psi)*ds(1)
+        a += -inner(nu*dot(n, nabla_grad(z)), psi)*ds(2)
+        a += -inner(nu*dot(n, nabla_grad(z)), psi)*ds(3)
+        #a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(1)
+        #a += -nu*inner(psi, dot(n, nabla_grad(z)))*ds(3)
+        #a += -g*phi*dot(z, n)*ds(2)
+        ##a += -zeta*phi*dot(u, n)*ds(1)
+        #a += -zeta*phi*dot(u, n)*ds(2)
+
+        a += -phi*zeta*dot(u, n)*ds(1) -phi*zeta*dot(u, n)*ds(2)
 
         # solve
         params = {
@@ -160,8 +172,8 @@ class TurbineProblem():
                   'ksp_monitor': None,
                   #'ksp_converged_reason': None,
                  }
-        #bc = None
-        bc = DirichletBC(self.V.sub(0), 0, 'on_boundary')  # FIXME: not apparent in discrete adjoint
+        #bc = DirichletBC(self.V.sub(0), 0, 'on_boundary')  # FIXME: not apparent in discrete adjoint
+        bc = DirichletBC(self.V.sub(0), interpolate(u, self.V.sub(0)), 2)  # FIXME: heuristic
         solve(a == L, self.sol_adjoint, bcs=bc, solver_parameters=params)
 
         # plot

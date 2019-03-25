@@ -206,88 +206,179 @@ class TurbineProblem():
         elif self.op.adapt_field == 'both':
             self.M = metric_intersection(self.M, steady_metric(eta, op=self.op))
 
-    def get_hessian_metric_adjoint(self):
-        z, zeta = self.sol_adjoint.split()
-        if self.op.adapt_field in ('fluid_speed', 'both'):
-            spd = interpolate(sqrt(inner(z, z)), self.P1)
-            self.M = steady_metric(spd, op=self.op)
-        if self.op.adapt_field == 'elevation':
-            self.M = steady_metric(zeta, op=self.op)
-        elif self.op.adapt_field == 'both':
-            self.M = metric_intersection(self.M, steady_metric(zeta, op=self.op))
-
     def get_hessian_metric_superposed(self):
-        self.get_hessian_metric()
+        self.get_hessian_metric(adjoint=False)
         M = self.M.copy()
-        self.get_hessian_metric_adjoint()
+        self.get_hessian_metric(adjoint=True)
         self.M = metric_intersection(M, self.M)
 
+    def vorticity_indication(self):
+        u = self.sol.split()[0]
+        self.indicator = project(curl(u), self.P1)
+
     def explicit_estimation(self):
-        raise NotImplementedError
+        g = self.g
+        nu = self.nu
+        n = self.n
+        i = TestFunction(self.P0)
+        u, eta = self.sol.split()
+        unorm = sqrt(inner(u, u))
+        H = eta + self.b
+        C = self.C_D + self.C_b
+
+        # strong residuals (on cells)
+        R0 = div(nu*grad(u)) - dot(u, nabla_grad(u)) - g*grad(eta) - C*unorm*u/H
+        R1 = -div(H*u)
+        R_norm = assemble(i*(inner(R0, R0) + R1*R1)*dx)
+
+        # solve auxiliary problem to assemble edge residual
+        r_norm = TrialFunction(self.P0)
+        mass_term = i*r_norm*dx
+        r = -H*dot(u, n)         # Neumann condition on banks
+        flux_terms = ((r*r*i)('+') + (r*r*i)('-'))*dS + r*r*i*ds(3)
+        r = Constant(3.) - u[0]  # Dirichlet condition on inflow
+        flux_terms += i*r*r*ds(1)
+        r = -eta                 # Dirichlet condition on outflow
+        flux_terms += i*r*r*ds(2)
+        r_norm = Function(self.P0)
+        solve(mass_term == flux_terms, r_norm)
+
+        # form error estimator
+        self.indicator = project(sqrt(self.h*self.h*R_norm + 0.5*self.h*r_norm), self.P0)
+        self.indicator.rename('explicit')
+
+    def explicit_estimation_adjoint(self):
+        g = self.g
+        nu = self.nu
+        i = TestFunction(self.P0)
+
+        u, eta = self.sol.split()
+        z, zeta = self.sol_adjoint.split()
+        unorm = sqrt(inner(u, u))
+        H = eta + self.b
+        C = self.C_D + self.C_b
+
+        # strong residuals (on cells)
+        R0 = 3*self.C_D*unorm*u - dot(transpose(grad(u)), z) + div(u)*z + dot(u, nabla_grad(z)) + div(nu*grad(z)) + H*grad(zeta) - C*(unorm*z + inner(u, z)*u/unorm)/H
+        R1 = g*div(z) + inner(u, grad(zeta)) + C*unorm*inner(u, z)/H
+        R_norm = assemble(i*(inner(R0, R0) + R1*R1)*dx)
+
+        # TODO: flux terms
+        r_norm = Constant(0.)
+
+        # form error estimator
+        self.indicator = project(sqrt(self.h*self.h*R_norm + 0.5*self.h*r_norm), self.P0)
+        self.indicator.rename('explicit')
 
     def dwp_indication(self):
         self.indicator = project(inner(self.sol, self.sol_adjoint), self.P1)
+        self.indicator.rename('dwp')
 
     def difference_quotient_estimation(self):
-        raise NotImplementedError
+        raise NotImplementedError  # TODO
  
     def dwr_estimation(self):
-        raise NotImplementedError
+        raise NotImplementedError  # TODO
 
     def dwr_estimation_adjoint(self):
-        raise NotImplementedError
+        raise NotImplementedError  # TODO
 
-    def get_isotropic_metric(self):
+    def ensure_p1(self):
+        el = self.indicator.ufl_element()
+        if (el.family(), el.degree()) != ('Lagrange', 1):
+            self.indicator = project(self.indicator, self.P1)
+
+    def normalise_indicator(self):
         name = self.indicator.name()
-        self.indicator = project(self.indicator, self.P1)
+        self.ensure_p1()
         self.indicator = normalise_indicator(self.indicator, op=self.op)
         self.indicator.rename(name + '_indicator')
         self.outfile_indicator.write(self.indicator)
+
+    def get_isotropic_metric(self):
+        self.normalise_indicator()
         self.M = isotropic_metric(self.indicator, op=self.op)
+
+    def get_anisotropic_metric(self, adjoint=False):
+        self.ensure_p1()
+
+        # construct Hessian
+        u, eta = self.sol_adjoint.split() if adjoint else self.sol.split()
+        if self.op.adapt_field in ('fluid_speed', 'both'):
+            spd = interpolate(sqrt(inner(u, u)), self.P1)
+            self.M = construct_hessian(spd, op=self.op)
+        if self.op.adapt_field == 'elevation':
+            self.M = construct_hessian(eta, op=self.op)
+        elif self.op.adapt_field == 'both':
+            raise NotImplementedError  # TODO
+
+        # scale with error indicator
+        for i in range(len(self.indicator.dat.data)):   # TODO: use pyop2
+            self.M.dat.data[i][:,:] *= self.indicator.dat.data[i]
+        self.M = steady_metric(None, H=self.M, op=self.op)
 
     def adapt_mesh(self, relaxation_parameter=0.9, prev_metric=None, plot_mesh=True):
         
         # Estimate error and generate associated metric
-        if self.approach == 'hessian':
-            self.get_hessian_metric()
-        elif self.approach == 'hessian_adjoint':
-            self.get_hessian_metric_adjoint()
-        elif self.approach == 'hessian_superposed':
+        if self.op.approach == 'hessian':
+            self.get_hessian_metric(adjoint=False)
+        elif self.op.approach == 'hessian_adjoint':
+            self.get_hessian_metric(adjoint=True)
+        elif self.op.approach == 'hessian_superposed':
             self.get_hessian_metric_superposed()
-        elif self.approach == 'explicit':
+        elif self.op.approach == 'vorticity':
+            self.vorticity_indication()
+            self.get_isotropic_metric()
+        elif self.op.approach == 'explicit':
             self.explicit_estimation()
             self.get_isotropic_metric()
-        elif self.approach == 'dwp':
+        elif self.op.approach == 'explicit_adjoint':
+            self.explicit_estimation_adjoint()
+            self.get_isotropic_metric()
+        elif self.op.approach == 'explicit_hessian':
+            self.explicit_estimation()
+            self.get_anisotropic_metric(adjoint=True)
+        elif self.op.approach == 'explicit_hessian_adjoint':
+            self.explicit_estimation_adjoint()
+            self.get_anisotropic_metric(adjoint=False)
+        elif self.op.approach == 'explicit_hessian_superposed':
+            self.explicit_estimation()
+            self.get_anisotropic_metric(adjoint=True)
+            M = self.M.copy()
+            self.explicit_estimation_adjoint()
+            self.get_anisotropic_metric(adjoint=False)
+            self.M = metric_intersection(M, self.M)
+        elif self.op.approach == 'dwp':
             self.dwp_indication()
             self.get_isotropic_metric()
-        elif self.approach == 'dwr':
+        elif self.op.approach == 'dwr':
             self.dwr_estimation()
             self.get_isotropic_metric()
-        elif self.approach == 'dwr_adjoint':
+        elif self.op.approach == 'dwr_adjoint':
             self.dwr_estimation_adjoint()
             self.get_isotropic_metric()
-        elif self.approach == 'dwr_both':
+        elif self.op.approach == 'dwr_both':
             self.dwr_estimation()
             self.get_isotropic_metric()
             i = self.indicator.copy()
             self.dwr_estimation_adjoint()
             self.indicator.interpolate(Constant(0.5)*(i+self.indicator))
             self.get_isotropic_metric()
-        elif self.approach == 'dwr_averaged':
+        elif self.op.approach == 'dwr_averaged':
             self.dwr_estimation()
             self.get_isotropic_metric()
             i = self.indicator.copy()
             self.dwr_estimation_adjoint()
             self.indicator.interpolate(Constant(0.5)*(abs(i)+abs(self.indicator)))
             self.get_isotropic_metric()
-        elif self.approach == 'dwr_relaxed':
+        elif self.op.approach == 'dwr_relaxed':
             self.dwr_estimation()
             self.get_isotropic_metric()
             M = self.M.copy()
             self.dwr_estimation_adjoint()
             self.get_isotropic_metric()
             self.M = metric_relaxation(M, self.M)
-        elif self.approach == 'dwr_superposed':
+        elif self.op.approach == 'dwr_superposed':
             self.dwr_estimation()
             self.get_isotropic_metric()
             M = self.M.copy()
@@ -295,7 +386,7 @@ class TurbineProblem():
             self.get_isotropic_metric()
             self.M = metric_intersection(M, self.M)
         else:
-            raise ValueError("Adaptivity mode {:s} not regcognised.".format(self.approach))
+            raise ValueError("Adaptivity mode {:s} not regcognised.".format(self.op.approach))
 
         # Apply metric relaxation, if requested
         self.M_unrelaxed = self.M.copy()

@@ -3,7 +3,7 @@ import math
 #op2.init(log_level=INFO)
 
 from adapt.metric import *
-#from adapt.interpolation import interp
+from adapt.interpolation import *
 from turbine.options import TurbineOptions
 
 
@@ -24,11 +24,12 @@ A_T = math.pi*(D/2)**2
 
 class TurbineProblem():
 
-    def __init__(self, mesh=None, approach='FixedMesh', op=TurbineOptions()):
+    def __init__(self, mesh=None, op=TurbineOptions()):
         self.mesh = Mesh('channel.msh') if mesh is None else mesh
         self.P1 = FunctionSpace(self.mesh, "CG", 1)
         self.P0 = FunctionSpace(self.mesh, "DG", 0)
-        self.approach = approach
+        self.h = CellSize(self.mesh)
+        self.n = FacetNormal(self.mesh)
         self.op = op
 
         # physical parameters
@@ -54,7 +55,6 @@ class TurbineProblem():
         z, zeta = self.sol_adjoint.split()
         z.rename('Adjoint velocity')
         zeta.rename('Adjoint elevation')
-        self.n = FacetNormal(self.mesh)
 
         # solver parameters
         self.params = {
@@ -97,7 +97,7 @@ class TurbineProblem():
         F += nu*inner(grad(psi), grad(u))*dx
         # drag term
         F += (self.C_D+self.C_b)*sqrt(dot(u_old, u_old))*dot(psi, u)/H*dx  # note use of u_old
-        # hudiv term (in.c Neumann condition)
+        # hudiv term (inc. Neumann condition)
         F += phi*H*dot(u, n)*ds(1) + phi*H*dot(u, n)*ds(2)
         F += -H*dot(u, grad(phi))*dx
 
@@ -115,10 +115,14 @@ class TurbineProblem():
         u, eta = self.sol.split()
         self.outfile.write(u, eta)
 
-    def solve(self):
-        print('Solving with assumed constant velocity')
-        self.solve_onestep()
-        print('Solving with previously established velocity')
+    def solve(self, prev_sol=None):
+        if prev_sol is None:
+            print('Solving with assumed constant velocity')
+            self.solve_onestep()
+            print('Solving with previously established velocity')
+        else:
+            self.sol = prev_sol
+            print('Solving with provided velocity')
         self.solve_onestep()
 
     def solve_adjoint(self):
@@ -192,8 +196,8 @@ class TurbineProblem():
         print("Objective functional: {:.4e}".format(self.J))
         return self.J
 
-    def get_hessian_metric(self):
-        u, eta = self.sol.split()
+    def get_hessian_metric(self, adjoint=False):
+        u, eta = self.sol_adjoint.split() if adjoint else self.sol.split()
         if self.op.adapt_field in ('fluid_speed', 'both'):
             spd = interpolate(sqrt(inner(u, u)), self.P1)
             self.M = steady_metric(spd, op=self.op)
@@ -307,12 +311,33 @@ class TurbineProblem():
 
 if __name__ == "__main__":
 
-    op = TurbineOptions()
-    op.adapt_field = 'both'
+    import argparse
 
-    approach = 'hessian_superposed'
-    tp = TurbineProblem(approach=approach, op=op)
-    tp.solve()
-    J = tp.objective_functional()
-    tp.solve_adjoint()
-    tp.adapt_mesh()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-approach", help="Choose adaptive approach from {'HessianBased', 'DWP', 'DWR'} (default 'FixedMesh'). Option 'AdjointOnly' allows to just look at adjoint solution.")
+    parser.add_argument("-field", help="Choose field to adapt to from {'fluid_speed', 'elevation', 'both'}, denoting speed, free surface and both, resp.")
+    parser.add_argument("-n", help="Specify number of mesh adaptations (default 1).")
+    args = parser.parse_args()
+
+    op = TurbineOptions()
+    if args.approach is not None:
+        op.approach = args.approach
+    if args.field is not None:
+        op.adapt_field = args.field
+    op.num_adapt = 1
+    if args.n is not None:
+        op.num_adapt = int(args.n)
+
+    mesh = None
+    prev_sol = None
+    tp = TurbineProblem(mesh=mesh, op=op)
+    for i in range(op.num_adapt):
+        tp.solve(prev_sol=prev_sol)
+        J = tp.objective_functional()
+        tp.solve_adjoint()
+        tp.adapt_mesh()
+        if i < op.num_adapt-1:
+            mesh = tp.mesh
+            prev_sol = tp.sol
+            tp = TurbineProblem(mesh=mesh, op=op)
+            prev_sol = mixed_pair_interp(mesh, tp.V, prev_sol)

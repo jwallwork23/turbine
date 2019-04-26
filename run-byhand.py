@@ -2,9 +2,9 @@ from firedrake import *
 import math
 #op2.init(log_level=INFO)
 
-from adapt.metric import *
-from adapt.interpolation import *
-from turbine.options import TurbineOptions
+from adapt_utils.adapt.metric import *
+from adapt_utils.adapt.interpolation import *
+from adapt_utils.turbine.options import TurbineOptions
 
 
 # read global variables defining turbines from geo file

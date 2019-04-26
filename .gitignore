@@ -1,8 +1,11 @@
 # Directories to ignore
 outputs/
 outputs-noid/
+utils/
 .idea/
 utils/__pycache__/
 
 # Files to ignore
 channel.msh
+run-adapt-old.py
+test.py

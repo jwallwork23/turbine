@@ -35,13 +35,8 @@ if args.dwr_approach is not None:
 op.desired_error = 1e-4
 #op.max_anisotropy = 50.
 print(op)
-mo = MeshOptimisation(SteadyTurbineProblem,
-                      op=op,
-                      mesh=Mesh('channel.msh'),
-                      stab='lax_friedrichs')
+mo = MeshOptimisation(SteadyTurbineProblem, op, mesh=Mesh('channel.msh'))
 mo.iterate()
 
-#ol = OuterLoop(SteadyTurbineProblem,
-#               Mesh('channel.msh'),
-#               approach=args.approach)
+#ol = OuterLoop(SteadyTurbineProblem, op, Mesh('channel.msh'))
 #ol.scale_to_convergence()

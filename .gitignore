@@ -1,11 +1,9 @@
 # Directories to ignore
-outputs/
-outputs-noid/
-utils/
-.idea/
-utils/__pycache__/
+steady/outputs/
+steady/outputs-noid/
+steady/screenshots/
 
 # Files to ignore
-channel.msh
-run-adapt-old.py
-test.py
+*.msh
+steady/run-adapt-old.py
+steady/test.py

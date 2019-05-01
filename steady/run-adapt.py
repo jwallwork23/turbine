@@ -6,37 +6,35 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-approach", help="Choose adaptive approach")
-parser.add_argument("-dwr_approach", help="Choose DWR approach")
+parser.add_argument("-dwr_approach")
+parser.add_argument("-num_turbines")
 args = parser.parse_args()
 
-# read global variables defining turbines from geo file  # TODO: is this necessary?
-geo = open('../channel.geo', 'r')
-W = float(geo.readline().replace(';', '=').split('=')[1])
-D = float(geo.readline().replace(';', '=').split('=')[1])
-xt1 = float(geo.readline().replace(';', '=').split('=')[1])
-xt2 = float(geo.readline().replace(';', '=').split('=')[1])
-dx1 = float(geo.readline().replace(';', '=').split('=')[1])
-dx2 = float(geo.readline().replace(';', '=').split('=')[1])
-L = float(geo.readline().replace(';', '=').split('=')[1])
-geo.close()
-yt1=W/2
-yt2=W/2
+num_turbines = 2 if args.num_turbines is None else int(args.num_turbines)
+approach = 'fixed_mesh' if args.approach is None else args.approach
+if num_turbines == 2:
+    op = Steady2TurbineOptions(approach=approach)
+    mesh = Mesh('../fine_2_turbine.msh')
+elif num_turbines == 15:
+    op = Steady15TurbineOptions(approach=approach)
+    mesh = Mesh('../fine_15_turbine.msh')
+else:
+    raise NotImplementedError
 
-#tp = SteadyTurbineProblem(mesh=Mesh('channel.msh'), approach=args.approach)
+#tp = SteadyTurbineProblem(mesh=mesh, op=op)
 #tp.solve()
-#tp.solve_discrete_adjoint()
+#tp.solve_adjoint()
 #tp.adapt_mesh()
 #tp.plot()
 
-op = TwoTurbineOptions(approach=args.approach)
 if args.dwr_approach is not None:
     op.dwr_approach = args.dwr_approach
 #op.desired_error = 1e-5
-op.desired_error = 1e-4
+op.desired_error = 1e-2
 #op.max_anisotropy = 50.
 print(op)
-mo = MeshOptimisation(SteadyTurbineProblem, op, mesh=Mesh('../channel.msh'))
+mo = MeshOptimisation(SteadyTurbineProblem, op, mesh)
 mo.iterate()
 
-#ol = OuterLoop(SteadyTurbineProblem, op, Mesh('channel.msh'))
+#ol = OuterLoop(SteadyTurbineProblem, op, mesh)
 #ol.scale_to_convergence()

@@ -2,6 +2,9 @@
 steady/outputs/
 steady/outputs-noid/
 steady/screenshots/
+unsteady/output/
+unsteady/outputs/
+unsteady/videos/
 
 # Files to ignore
 *.msh

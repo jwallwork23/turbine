@@ -1,7 +1,9 @@
 all: mesh
 
 mesh:
-	gmsh -2 channel.geo
+	gmsh -2 coarse_2_turbine.geo
+	gmsh -2 fine_2_turbine.geo
+	gmsh -2 fine_15_turbine.geo
 
 clean:
 	rm -Rf steady/outputs/*

@@ -4,7 +4,7 @@ import math
 # op2.init(log_level=INFO)
 
 # read global variables defining turbines from geo file
-geo = open('channel.geo', 'r')
+geo = open('../channel.geo', 'r')
 W = float(geo.readline().replace(';', '=').split('=')[1])
 D = float(geo.readline().replace(';', '=').split('=')[1])
 xt1 = float(geo.readline().replace(';', '=').split('=')[1])
@@ -17,7 +17,7 @@ yt1=W/2
 yt2=W/2
 
 #mesh2d = RectangleMesh(int(L/dx1), int(W/dx1), L, W)
-mesh2d = Mesh('channel.msh')
+mesh2d = Mesh('../channel.msh')
 
 # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly 
 # 800 timesteps of 20s

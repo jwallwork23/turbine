@@ -3,7 +3,7 @@ from thetis import *
 import math
 # op2.init(log_level=INFO)
 
-mesh2d = Mesh('channel.msh')
+mesh2d = Mesh('../channel.msh')
 
 # if we solve with PressureProjectionPicard (theta=1.0) it seems to converge (power output to 7 digits) in roughly 
 # 800 timesteps of 20s

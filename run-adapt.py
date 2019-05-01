@@ -38,8 +38,7 @@ print(op)
 mo = MeshOptimisation(SteadyTurbineProblem,
                       op=op,
                       mesh=Mesh('channel.msh'),
-                      stab='lax_friedrichs',
-                      approach=args.approach)
+                      stab='lax_friedrichs')
 mo.iterate()
 
 #ol = OuterLoop(SteadyTurbineProblem,

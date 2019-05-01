@@ -3,6 +3,7 @@ all: mesh outdirs
 mesh:
 	gmsh -2 channel.geo
 
+# TODO: Use inbuilt Thetis function within scripts for this
 outdirs:
 	mkdir outputs
 	mkdir outputs-noid

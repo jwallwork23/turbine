@@ -6,6 +6,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-approach", help="Choose adaptive approach")
+parser.add_argument("-dwr_approach", help="Choose DWR approach")
 args = parser.parse_args()
 
 # read global variables defining turbines from geo file
@@ -27,15 +28,17 @@ yt2=W/2
 #tp.adapt_mesh()
 #tp.plot()
 
-op = TwoTurbineOptions()
-op.desired_error = 1e-5
-#op.desired_error = 1e-4
+op = TwoTurbineOptions(approach=args.approach)
+if args.dwr_approach is not None:
+    op.dwr_approach = args.dwr_approach
+#op.desired_error = 1e-5
+op.desired_error = 1e-4
+#op.max_anisotropy = 50.
 print(op)
 mo = MeshOptimisation(SteadyTurbineProblem,
                       op=op,
                       mesh=Mesh('channel.msh'),
-                      stab='lax_friedrichs',
-                      approach=args.approach)
+                      stab='lax_friedrichs')
 mo.iterate()
 
 #ol = OuterLoop(SteadyTurbineProblem,

@@ -21,18 +21,19 @@ elif num_turbines == 15:
 else:
     raise NotImplementedError
 
+if args.dwr_approach is not None:
+    op.dwr_approach = args.dwr_approach
+#op.desired_error = 1e-5
+#op.max_anisotropy = 50.
+print(op)
+op.desired_error = 1e-2
+
 #tp = SteadyTurbineProblem(mesh=mesh, op=op)
 #tp.solve()
 #tp.solve_adjoint()
 #tp.adapt_mesh()
 #tp.plot()
 
-if args.dwr_approach is not None:
-    op.dwr_approach = args.dwr_approach
-#op.desired_error = 1e-5
-op.desired_error = 1e-2
-#op.max_anisotropy = 50.
-print(op)
 mo = MeshOptimisation(SteadyTurbineProblem, op, mesh)
 mo.iterate()
 

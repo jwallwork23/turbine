@@ -23,7 +23,7 @@ elif initial_mesh =='fine':
 # parameters
 num_turbines = 2 if args.num_turbines is None else int(args.num_turbines)
 approach = 'fixed_mesh' if args.approach is None else args.approach
-op = Steady2TurbineOptions(approach=approach) if num_turbines == 2 else Steady15TurbineOptions(approach=approach)
+op = Unsteady2TurbineOptions(approach=approach) if num_turbines == 2 else Unsteady15TurbineOptions(approach=approach)
 op.family = 'dg-cg'
 op.end_time = op.T_tide
 

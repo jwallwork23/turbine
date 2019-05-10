@@ -14,7 +14,7 @@ element_rtol = 0.001 if args.element_rtol is None else float(args.element_rtol)
 objective_rtol = 0.0001 if args.objective_rtol is None else float(args.objective_rtol)
 
 # optimise
-mo = MeshOptimisation(SteadyTurbineProblem, Steady2TurbineOptions(approach='uniform'))
+mo = MeshOptimisation(SteadyTurbineProblem, Steady2TurbineOptions(approach='uniform'), mesh=Mesh('../coarse_2_turbine.msh'))
 mo.maxit=maxit
 mo.element_rtol=element_rtol
 mo.objective_rtol=objective_rtol

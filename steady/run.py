@@ -34,6 +34,7 @@ if args.dwr_approach is not None:
 op.restrict = 'error' if args.restrict is None else args.restrict
 op.desired_error = 1e-5 if args.desired_error is None else float(args.desired_error)
 op.adapt_field = 'fluid_speed' if args.adapt_field is None else args.adapt_field
+op.family = 'dg-cg'
 print(op)
 
 #tp = SteadyTurbineProblem(mesh=mesh, op=op)

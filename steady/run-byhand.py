@@ -8,7 +8,7 @@ from adapt_utils.turbine.options import TurbineOptions
 
 
 # read global variables defining turbines from geo file
-geo = open('channel.geo', 'r')
+geo = open('coarse_2_turbine.geo', 'r')
 W = float(geo.readline().replace(';', '=').split('=')[1])
 D = float(geo.readline().replace(';', '=').split('=')[1])
 xt1 = float(geo.readline().replace(';', '=').split('=')[1])
@@ -25,7 +25,7 @@ A_T = math.pi*(D/2)**2
 class TurbineProblem():
 
     def __init__(self, mesh=None, op=TurbineOptions()):
-        self.mesh = Mesh('channel.msh') if mesh is None else mesh
+        self.mesh = Mesh('coarse_2_turbine.msh') if mesh is None else mesh
         self.P1 = FunctionSpace(self.mesh, "CG", 1)
         self.P0 = FunctionSpace(self.mesh, "DG", 0)
         self.h = CellSize(self.mesh)

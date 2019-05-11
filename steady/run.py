@@ -48,6 +48,7 @@ print(op)
 
 ol = OuterLoop(SteadyTurbineProblem, op, mesh)
 #ol.scale_to_convergence()
-ol.desired_error_loop()
 ol.outer_startit = 0 if args.outer_startit is None else int(args.outer_startit)
 ol.outer_maxit = 4 if args.outer_maxit is None else int(args.outer_maxit)
+ol.objective_rtol = 0.001  # TODO: temp
+ol.desired_error_loop()

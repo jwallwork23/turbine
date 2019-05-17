@@ -31,7 +31,9 @@ op = Steady2TurbineOptions(approach=approach) if num_turbines == 2 else Steady15
 
 if args.dwr_approach is not None:
     op.dwr_approach = args.dwr_approach
-op.restrict = 'error' if args.restrict is None else args.restrict
+if initial_mesh == 'uniform':
+    op.boundary_conditions[4] = op.boundary_conditions[3]
+op.restrict = 'target' if args.restrict is None else args.restrict
 op.desired_error = 1e-5 if args.desired_error is None else float(args.desired_error)
 op.adapt_field = 'fluid_speed' if args.adapt_field is None else args.adapt_field
 op.family = 'dg-cg'

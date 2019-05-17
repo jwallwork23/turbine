@@ -28,6 +28,8 @@ else:
 # parameters
 approach = 'fixed_mesh' if args.approach is None else args.approach
 op = Unsteady2TurbineOptions(approach=approach) if num_turbines == 2 else Unsteady15TurbineOptions(approach=approach)
+if initial_mesh == 'uniform':
+    op.boundary_conditions[4] = op.boundary_conditions[3]
 op.family = 'dg-cg'
 op.adapt_field = 'fluid_speed' if args.adapt_field is None else args.adapt_field
 op.end_time = op.T_tide

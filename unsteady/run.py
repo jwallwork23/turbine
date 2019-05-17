@@ -18,10 +18,11 @@ num_turbines = 2 if args.num_turbines is None else int(args.num_turbines)
 initial_mesh = 'uniform' if args.initial_mesh is None else args.initial_mesh
 if initial_mesh == 'uniform':
     mesh = None  # TODO: parallel version for 15-turbine
-elif initial_mesh =='coarse':
-    mesh = Mesh('../coarse_{:d}_turbine.msh'.format(num_turbines))  # TODO: for 15-turbine
-elif initial_mesh =='fine':
-    mesh = Mesh('../fine_{:d}_turbine.msh'.format(num_turbines))
+elif initial_mesh == 'coarse':
+    mesh = Mesh('../coarse_{:d}_turbine_centred.msh'.format(num_turbines))  # TODO: for 15-turbine
+elif initial_mesh == 'fine':
+    mesh = Mesh('../fine_{:d}_turbine_centred.msh'.format(num_turbines))  # TODO: for 15-turbine
+else:
     raise NotImplementedError
 
 # parameters
@@ -38,6 +39,7 @@ adj = False if args.solve_adjoint is None else bool(args.solve_adjoint)
 if adj:
     op_ = Unsteady2TurbineOptions() if num_turbines == 2 else Unsteady15TurbineOptions()
     op_.family = 'dg-cg'
+    op_.end_time = op_.T_tide
     tp = UnsteadyTurbineProblem(op=op_, mesh=mesh)
     tp.solve()
     tp.solve_adjoint()

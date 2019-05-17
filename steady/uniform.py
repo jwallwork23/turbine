@@ -1,4 +1,5 @@
 from thetis import *
+from firedrake.petsc import PETSc
 from adapt_utils import *
 import argparse
 
@@ -27,7 +28,7 @@ mesh = RectangleMesh(100*2**n, 20*2**n, 1000, 200)
 # optimise
 op = Steady2TurbineOptions(approach='uniform') if num_turbines == 2 else Steady15TurbineOptions(approach='uniform')
 op.family = 'dg-cg'
-tp = SteadyTurbineProblem(op, mesh=mesh)
+tp = SteadyTurbineProblem(mesh, op)
 tp.solve()
-print('Done!')
-
+J = tp.objective_functional()
+PETSc.Sys.Print("Objective value on mesh with %d elements: %.4e" % (mesh.num_cells(), J), comm=COMM_WORLD)

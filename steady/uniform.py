@@ -1,4 +1,4 @@
-from thetis_adjoint import *
+from thetis import *
 from adapt_utils import *
 import argparse
 

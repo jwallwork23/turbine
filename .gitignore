@@ -9,7 +9,6 @@ unsteady/videos/
 # Files to ignore
 *.msh
 steady/run-adapt-old.py
-steady/test.py
 steady/stephan.py
 steady/stephan-noid.py
 unsteady/nic.py

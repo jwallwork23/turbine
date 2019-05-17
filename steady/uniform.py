@@ -24,6 +24,9 @@ num_turbines = 2 if args.num_turbines is None else int(args.num_turbines)
 #    raise NotImplementedError
 n = 0 if args.resolution is None else float(args.resolution)
 mesh = RectangleMesh(100*2**n, 20*2**n, 1000, 200)
+#mesh = Mesh('../coarse_{:d}_turbine.msh'.format(num_turbines))
+#mh = MeshHierarchy(mesh, n)
+#mesh = mh[n]
 
 # optimise
 op = Steady2TurbineOptions(approach='uniform') if num_turbines == 2 else Steady15TurbineOptions(approach='uniform')

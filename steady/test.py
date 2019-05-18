@@ -2,7 +2,7 @@ from thetis_adjoint import *
 from adapt_utils import *
 
 num_turbines = 2
-approach = 'dwr_anisotropic'
+approach = 'dwr'
 initial_mesh = 'coarse'
 if initial_mesh == 'uniform':
     mesh = None  # TODO: parallel version for 15-turbine
@@ -13,15 +13,16 @@ elif initial_mesh =='fine':
     raise NotImplementedError
 op = Steady2TurbineOptions(approach=approach) if num_turbines == 2 else Steady15TurbineOptions(approach=approach)
 
-if initial_mesh == 'uniform':
-    op.boundary_conditions[4] = op.boundary_conditions[3]
-#op.restrict = 'target'
+# FIXME
+#if initial_mesh == 'uniform':
+#    op.boundary_conditions[4] = op.boundary_conditions[3]
+
+op.restrict = 'target'
 #op.restrict = 'p_norm'
 #op.target = 1e+04
-op.target = 1e+01
-op.adapt_field = 'elevation'
-#op.params['dm_plex_prescribed_boundary_labels'] = 3
-#op.params['dm_plex_prescribed_boundary_sizes'] = 0.5
+op.target = 1e+02
+op.adapt_field = 'fluid_speed'
+op.dwr_approach = 'cell_only'
 op.family = 'dg-cg'
 print(op)
 

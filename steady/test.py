@@ -3,6 +3,7 @@ from adapt_utils import *
 
 num_turbines = 2
 approach = 'dwr'
+#initial_mesh = 'fine'
 initial_mesh = 'coarse'
 if initial_mesh == 'uniform':
     mesh = None  # TODO: parallel version for 15-turbine
@@ -10,8 +11,12 @@ elif initial_mesh =='coarse':
     mesh = Mesh('../coarse_{:d}_turbine.msh'.format(num_turbines))  # TODO: for 15-turbine
 elif initial_mesh =='fine':
     mesh = Mesh('../fine_{:d}_turbine.msh'.format(num_turbines))
-    raise NotImplementedError
-op = Steady2TurbineOptions(approach=approach) if num_turbines == 2 else Steady15TurbineOptions(approach=approach)
+if num_turbines == 1:
+    op = Steady1TurbineOptions(approach=approach)
+elif num_turbines == 2:
+    op = Steady2TurbineOptions(approach=approach)
+else:
+    op = Steady15TurbineOptions(approach=approach)
 
 # FIXME
 #if initial_mesh == 'uniform':
@@ -19,11 +24,12 @@ op = Steady2TurbineOptions(approach=approach) if num_turbines == 2 else Steady15
 
 op.restrict = 'target'
 #op.restrict = 'p_norm'
-#op.target = 1e+04
 op.target = 1e+02
 op.adapt_field = 'fluid_speed'
-op.dwr_approach = 'cell_only'
+#op.dwr_approach = 'cell_only'
 op.family = 'dg-cg'
+op.relax = True
+#op.relax = False
 print(op)
 
 #tp = SteadyTurbineProblem(mesh=mesh, op=op)
@@ -33,6 +39,7 @@ print(op)
 #tp.plot()
 
 mo = MeshOptimisation(SteadyTurbineProblem, op, mesh)
+#mo.objective_rtol = 0.000000001
 mo.iterate()
 
 #ol = OuterLoop(SteadyTurbineProblem, op, mesh)

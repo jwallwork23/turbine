@@ -1,4 +1,5 @@
-from adapt_utils import *
+from adapt_utils.turbine.meshgen import *
+from adapt_utils.turbine.options import *
 
 #generate_geo_file(Steady1TurbineOptions(), level='coarse')
 #generate_geo_file(Steady1TurbineOptions(), level='fine')

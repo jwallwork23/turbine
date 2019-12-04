@@ -15,6 +15,7 @@ parser.add_argument('-approach')
 parser.add_argument('-target')
 parser.add_argument('-offset')
 parser.add_argument('-adapt_field')
+parser.add_argument('-initial_mesh')
 args = parser.parse_args()
 
 op2.init(log_level=INFO)
@@ -22,7 +23,7 @@ op2.init(log_level=INFO)
 # Set parameters
 approach = 'carpio' if args.approach is None else args.approach
 num_adapt = 35  # Maximum iterations
-level = 'xcoarse'
+level = 'xcoarse' if args.initial_mesh is None else args.initial_mesh
 offset = False if args.offset is None else bool(args.offset)
 
 label = level + '_2'
@@ -51,7 +52,7 @@ if level == 'uniform':
     mesh = op.default_mesh
 else:
     mesh = Mesh(os.path.join('..', '{:s}_turbine.msh'.format(label)))
-mh = MeshHierarchy(mesh, 3)
+mh = MeshHierarchy(mesh, 1)
 print("Number of elements: {:d}".format(mesh.num_cells()))
 
 for i in range(op.num_adapt):
@@ -81,6 +82,9 @@ for i in range(op.num_adapt):
 
     if approach != 'uniform' or 'hessian' in approach:
         tp.solve_adjoint()
+
+    if approach == 'fixed_mesh_adjoint':
+        break
 
     if approach != 'uniform' or 'hessian' in approach:
 

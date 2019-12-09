@@ -52,7 +52,7 @@ if level == 'uniform':
     mesh = op.default_mesh
 else:
     mesh = Mesh(os.path.join('..', '{:s}_turbine.msh'.format(label)))
-mh = MeshHierarchy(mesh, 3)
+mh = MeshHierarchy(mesh, 1)
 print("Number of elements: {:d}".format(mesh.num_cells()))
 
 for i in range(op.num_adapt):
@@ -87,7 +87,6 @@ for i in range(op.num_adapt):
         tp.plot()
         break
 
-
     if approach != 'uniform' or 'hessian' in approach:
 
         print("Solving in refined space")
@@ -106,16 +105,30 @@ for i in range(op.num_adapt):
         adj_proj_u, adj_proj_eta = adj_proj.split()
         adj_ho_u -= adj_proj_u
         adj_ho_eta -= adj_proj_eta
-        # inject(tp_ho.adjoint_solution, tp.adjoint_solution)  # FIXME: Is it because DG?
-        adj_u, adj_eta = tp.adjoint_solution.split()
-        adj_u.project(adj_ho_u)
-        adj_eta.project(adj_ho_eta)
 
         # Make sure everything is defined on the right mesh
-        tp.set_fields()
-        tp.boundary_conditions = op.set_bcs(tp.V)
+        tp_ho.set_fields()
+        tp_ho.boundary_conditions = op.set_bcs(tp.V)
 
-    tp.indicate_error()
+        # Indicate error in enriched space and then project (average) down to base space
+        tp_ho.get_strong_residual(proj, tp_ho.adjoint_solution)
+        tp_ho.get_flux_terms(proj, tp_ho.adjoint_solution)
+        tp_ho.indicator = interpolate(abs(tp_ho.indicators['dwr_cell'] + tp_ho.indicators['dwr_flux']), tp_ho.P0)
+        tp.indicator = project(tp_ho.indicator, tp.P0)  # This is equivalent to averaging
+        tp.estimators['dwr'] = assemble(tp.indicator*dx)
+
+        if tp.approach == 'carpio_isotropic':
+            amd = AnisotropicMetricDriver(tp.mesh, indicator=tp.indicator, op=tp.op)
+            amd.get_isotropic_metric()
+        elif tp.approach == 'carpio':
+            tp.get_hessian_metric(noscale=True)
+            amd = AnisotropicMetricDriver(tp.mesh, hessian=tp.M, indicator=tp.indicator, op=tp.op)
+            amd.get_anisotropic_metric()
+        else:
+            raise NotImplementedError
+        tp.M = amd.p1metric
+    else:
+        tp.indicate_error()
     print("Error estimator: {:.4e}".format(tp.estimators['dwr']))
     if i > 0 and np.abs(tp.estimators['dwr'] - estimator_old) < estimator_rtol*estimator_old:
         print("Number of elements: ", tp.mesh.num_cells())
